@@ -1,0 +1,42 @@
+{{- $hosts := list }}
+{{- range .Values.servers }}{{ $hosts = concat $hosts (default list .hosts) }}{{ end }}
+{{- range $i := .Values.ingresses }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "vg.fullname" $ }}-{{ required "ingresses[].name" $i.name }}
+  labels: {{- include "vg.labels" $ | nindent 4 }}
+  {{- with $i.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $i.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range $h := $hosts }}
+    - host: {{ $h }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vg.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
+    {{- end }}
+  {{- if $i.tls }}
+  tls:
+    {{- if $i.tlsSecretName }}
+    - hosts: {{- toYaml $hosts | nindent 8 }}
+      secretName: {{ $i.tlsSecretName }}
+    {{- else }}
+    {{- range $h := $hosts }}
+    - hosts: [{{ $h }}]
+      secretName: {{ $h }}-tls
+    {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}

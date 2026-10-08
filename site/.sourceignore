@@ -1,0 +1,3 @@
+# Flux source-controller drops *.png from artifacts by default; the page
+# ships its logo and favicons as PNGs via configMapGenerator.
+!*.png

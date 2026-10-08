@@ -1,0 +1,4 @@
+# The page: static files under /site. nginx's server block (which host shows which server's data) comes from the chart.
+FROM docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine
+LABEL org.opencontainers.image.source="https://github.com/xx4h/valheim-gamestats" org.opencontainers.image.licenses="MIT"
+COPY site/ /site/

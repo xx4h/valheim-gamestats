@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Built against the DLLs of the running server, copied into ./lib (gitignored):
+       valheim_server_Data/Managed/{assembly_valheim,assembly_utils,UnityEngine,UnityEngine.CoreModule}.dll,
+       BepInEx/core/{BepInEx,0Harmony}.dll, BepInEx/plugins/ValheimRcon.dll. See README.md. -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>ValheimGamestats</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="assembly_valheim" HintPath="lib/assembly_valheim.dll" Private="false" />
+    <Reference Include="assembly_utils" HintPath="lib/assembly_utils.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="lib/UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="lib/UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="BepInEx" HintPath="lib/BepInEx.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="lib/0Harmony.dll" Private="false" />
+    <Reference Include="ValheimRcon" HintPath="lib/ValheimRcon.dll" Private="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,38 @@
+# The collector as a Python package — standard library only, no dependencies, by design: it runs on a plain Python
+# image and anywhere with a Python 3. Installing isn't needed (python3 -m valheim_gamestats from this directory), but
+# works: pip install ./collector gives the valheim-gamestats-collector command.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "valheim-gamestats-collector"
+description = "Stats pages for Valheim dedicated servers: the collector"
+requires-python = ">=3.12"
+dependencies = []
+dynamic = ["version"]
+
+[project.scripts]
+valheim-gamestats-collector = "valheim_gamestats.collector:main"
+
+[tool.setuptools]
+packages = ["valheim_gamestats"]
+
+[tool.setuptools.package-data]
+valheim_gamestats = ["*.json"]  # scoring.json, the scoring defaults
+
+[tool.setuptools.dynamic]
+version = { attr = "valheim_gamestats.__version__" }
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+extend-include = []
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# A short lambda named for what it says (`when = lambda x: x["t"]`) reads better here than a def three lines down.
+ignore = ["E731"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["valheim_gamestats"]

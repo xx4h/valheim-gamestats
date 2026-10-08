@@ -1,0 +1,4 @@
+*
+!collector/valheim_gamestats/*.py
+!collector/valheim_gamestats/*.json
+!site/

@@ -1,0 +1,15 @@
+# The example server for docs/MANUAL-DEPLOYMENT.md: config.json and default.conf in this directory are rendered from
+# the chart with these values (tests/chart/check.sh keeps them in sync: regenerate with examples/standalone/render.sh).
+siteName: Example game stats
+collector:
+  timezone: Europe/Berlin
+servers:
+  - id: my-valheim
+    title: My Valheim
+    hosts: [stats.example.com]
+    rcon:
+      host: 192.0.2.10        # the Valheim server, ValheimRcon's port
+      port: 25575
+    notify:                   # optional: the Discord feed
+      url: https://stats.example.com
+    maintenance: []

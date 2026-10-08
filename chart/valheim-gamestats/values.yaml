@@ -1,0 +1,111 @@
+# Everything a deployment needs to know about its servers and its cluster. Nothing here is specific to one setup:
+# the defaults run one page with no server configured.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  collector:
+    repository: ghcr.io/xx4h/valheim-gamestats/collector
+    tag: ""            # default: the chart's appVersion
+    pullPolicy: IfNotPresent
+  web:
+    repository: ghcr.io/xx4h/valheim-gamestats/web
+    tag: ""
+    pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The page's own name in link previews (og:site_name).
+siteName: "Game stats"
+
+collector:
+  interval: 60            # seconds between runs (the plugin's events, RCON); the world save has its own interval per server
+  timezone: UTC           # days, hours and weekly recaps
+  pluginVersion: ""       # the plugin the servers should run (health alert otherwise); default: the chart's appVersion
+  resources:
+    requests: { cpu: 10m, memory: 48Mi }
+    limits: { memory: 256Mi }
+  extraEnv: []
+  # e.g. the game server's directory for a world.path source (read-only), or a script for world.script
+  extraVolumes: []
+  extraVolumeMounts: []
+
+web:
+  resources:
+    requests: { cpu: 5m, memory: 16Mi }
+    limits: { memory: 64Mi }
+
+# What counts how much, for every server: the impact score, titles, Discord medals, badges, trading cards, traits,
+# report-card grades, milestones. Name only what you change; the defaults are collector/valheim_gamestats/scoring.json,
+# everything is explained (with the math) in docs/SCORING.md. A server's own `scoring` (below) wins over this.
+# values.schema.json catches unknown keys and wrong types at install time. E.g.:
+#   impact: {bonus: {built: 30, dist: 5}, penalty: {deaths: 0}}
+#   titles: {ragequit: {enabled: false}, marathon: {min: 7200}}
+scoring: {}
+
+# One entry per game server. Each gets its own page under its hosts.
+servers: []
+#  - id: my-valheim                 # [a-z0-9-], also the data directory and the secret key prefix
+#    title: My Valheim             # page title
+#    hosts: [stats.example.com]    # which hosts show this server (nginx + ingress)
+#    rcon:                         # ValheimRcon on the server: the plugin's events, positions, gear, the clock
+#      host: valheim-0.game.svc.cluster.local
+#      port: 25575
+#    maintenance: []               # planned downtime: [{from: "2026-01-01T10:00:00Z", to: "...", note: "Update"}]
+#    world:                        # optional: the game server's files — the world save (base, chests, pets, …), the
+#                                  # plugin's terrain sample (the map) and its event files while RCON can't be reached.
+#                                  # One source (collector/valheim_gamestats/sources.py):
+#      panel: http://pelican-panel.pelican.svc.cluster.local   # Pelican client API (file read permission; secrets
+#      panelHost: panel.example.com                             #   key pelicanApiKey), with panelHost, gateway, server
+#      gateway: http://wings.pelican.svc.cluster.local:8080   # where the panel's signed download URLs are served
+#      server: abcd1234            # Pelican server identifier
+#    # path: /game                 # or: the server's directory, mounted read-only (collector.extraVolumes/-Mounts)
+#    # script: /scripts/files.sh   # or: any command that lists and reads files (docs/MANUAL-DEPLOYMENT.md)
+#      dir: .config/unity3d/IronGate/Valheim/worlds_local/Dedicated   # relative to the server's directory, or absolute
+#      manifest: valheim_server_Data/StreamingAssets/SoftRef/manifest_extended
+#      terrain: BepInEx/gamestats  # where the plugin writes its terrain sample (this is the default)
+#      events: BepInEx/gamestats/events   # where the plugin keeps its events (the default)
+#      interval: 3600
+#    steam:                        # optional: Steam achievements
+#      app: 892970
+#      interval: 600
+#    notify:                       # optional: Discord posts (titles, bosses, raids, weekly recap)
+#      url: https://stats.example.com   # links in the posts
+#    support:                      # optional: a support link at the bottom of the page
+#      url: https://example.com/support
+#      label: Buy me a coffee
+#      text: ""
+#    scoring: {}                   # optional: this server's own scoring overrides, on top of the global ones
+
+# Credentials, all from one existing Secret (not created by the chart). Missing keys just switch that part off.
+secrets:
+  existingSecret: ""
+  keys:
+    pelicanApiKey: api_key             # Pelican client API key (world save)
+    steamApiKey: steam_api_key         # Steam Web API key
+    rcon: "{id}-rcon"                  # per server: ValheimRcon password
+    discordWebhook: "{id}-discord-webhook"   # per server: Discord webhook URL
+    alertsWebhook: alerts-discord-webhook    # admins' Discord webhook: plugin errors, missing lines, collector failures
+
+persistence:
+  existingClaim: ""        # events.db is the only copy of history the plugin's store no longer keeps: keep it
+  storageClass: ""
+  size: 1Gi
+  accessModes: [ReadWriteOnce]
+
+service:
+  port: 8080
+
+# Ingresses for all servers' hosts; several, e.g. an http→https redirect next to the TLS one.
+ingresses: []
+#  - name: https
+#    className: traefik
+#    annotations: {}
+#    tls: true                    # secret per host: <host>-tls
+#    tlsSecretName: ""            # or one secret for all hosts
+
+podLabels: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

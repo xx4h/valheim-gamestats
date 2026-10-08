@@ -1,0 +1,12 @@
+__pycache__/
+plugin/lib/
+plugin/bin/
+plugin/obj/
+tests/plugin/bin/
+tests/plugin/obj/
+tests/site/node_modules/
+tests/site/.chunks/
+tests/site/test-results/
+tests/site/playwright-report/
+tests/site/results.xml
+.coverage

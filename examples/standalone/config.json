@@ -1,0 +1,25 @@
+{
+  "alerts": {
+    "webhook_env": "GS_ALERTS_WEBHOOK"
+  },
+  "interval": 60,
+  "plugin_version": "1.20.11",
+  "servers": [
+    {
+      "game": "valheim",
+      "id": "my-valheim",
+      "maintenance": [],
+      "notify": {
+        "url": "https://stats.example.com",
+        "webhook_env": "GS_MY_VALHEIM_DISCORD_WEBHOOK"
+      },
+      "rcon": {
+        "host": "192.0.2.10",
+        "password_env": "GS_MY_VALHEIM_RCON_PASSWORD",
+        "port": 25575
+      },
+      "title": "My Valheim"
+    }
+  ],
+  "tz": "Europe/Berlin"
+}

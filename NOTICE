@@ -1,0 +1,14 @@
+valheim-gamestats
+Copyright (c) 2026 Fabian 'xx4h' Sylvester — the code, under the MIT license (LICENSE).
+
+An unofficial fan project, not affiliated with or endorsed by Iron Gate Studio.
+
+Not covered by the MIT license:
+
+  site/valheim-logo.png, site/favicon-32.png, site/favicon-64.png, site/apple-touch-icon.png
+    The Valheim logo and images made from it. Valheim and its logo are trademarks of Iron Gate AB; the logo is from
+    Iron Gate's press kit for press and creators (https://www.valheimgame.com/press/). Used here to show what game the
+    stats are for. To use your own, replace these files (or serve others in front of the web container).
+
+The game itself is not part of this repository or its images: the plugin is built against the Valheim dedicated server
+as published on Steam (plugin/fetch-refs.sh), and loads into it at runtime.

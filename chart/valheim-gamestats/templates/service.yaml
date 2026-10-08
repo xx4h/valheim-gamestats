@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vg.fullname" . }}
+  labels: {{- include "vg.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "vg.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

@@ -1,0 +1,521 @@
+{
+ "clock": {
+  "src": "sleep",
+  "t": 1790087412,
+  "time": 7470.0
+ },
+ "custody": [
+  [
+   "SwordIron",
+   "",
+   2,
+   [
+    [
+     1790001960,
+     "Ragnar",
+     "take",
+     "world chest",
+     768,
+     -576,
+     1
+    ]
+   ]
+  ]
+ ],
+ "day": 9,
+ "days": [
+  {
+   "d": 3,
+   "t": 1790087400
+  }
+ ],
+ "deaths": [
+  {
+   "p": "Ragnar",
+   "t": 1790002600
+  }
+ ],
+ "feats": [
+  [
+   1790003000,
+   "Ragnar",
+   "sprint",
+   42.5,
+   8
+  ],
+  [
+   1790003100,
+   "Astrid",
+   "fall",
+   12.4,
+   null
+  ],
+  [
+   1790003200,
+   "Ragnar",
+   "closecall",
+   4.1,
+   110
+  ]
+ ],
+ "fights": [
+  {
+   "boss": "Eikthyr",
+   "deaths": [],
+   "dmg": 500,
+   "e": 1790010860,
+   "exact": true,
+   "id": "Eikthyr-1790010740",
+   "outcome": "killed",
+   "parts": [
+    "Eikthyr"
+   ],
+   "players": {
+    "Astrid": {
+     "d": 200,
+     "k": 1,
+     "tk": 0,
+     "w": {
+      "Bow": 200
+     },
+     "x": 0
+    },
+    "Ragnar": {
+     "d": 300,
+     "k": 1,
+     "tk": 0,
+     "w": {
+      "AxeFlint": 300
+     },
+     "x": 0
+    }
+   },
+   "s": 1790010740
+  }
+ ],
+ "first": 1789999950,
+ "game": "valheim",
+ "gather": [
+  [
+   1789999200,
+   "Astrid",
+   "dist",
+   "foot",
+   6600
+  ],
+  [
+   1789999200,
+   "Astrid",
+   "fell",
+   "Beech1",
+   2
+  ],
+  [
+   1789999200,
+   "Astrid",
+   "pick",
+   "Wood",
+   528
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "dist",
+   "foot",
+   6600
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "dmg",
+   "Greyling",
+   80
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "dmg",
+   "Neck",
+   40
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "hit",
+   "",
+   3
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "kill",
+   "Greyling",
+   2
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "kill",
+   "Neck",
+   1
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "kw",
+   "AxeFlint>Greyling",
+   2
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "kw",
+   "AxeFlint>Neck",
+   1
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "loot",
+   "Coins",
+   55
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "mine",
+   "Rock4",
+   1
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "pick",
+   "Stone",
+   176
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "taken",
+   "",
+   30
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "wkill",
+   "AxeFlint",
+   3
+  ],
+  [
+   1790002800,
+   "Astrid",
+   "dist",
+   "foot",
+   9000
+  ],
+  [
+   1790002800,
+   "Astrid",
+   "pick",
+   "Wood",
+   156
+  ],
+  [
+   1790002800,
+   "Ragnar",
+   "dist",
+   "foot",
+   9000
+  ],
+  [
+   1790002800,
+   "Ragnar",
+   "pick",
+   "Stone",
+   52
+  ],
+  [
+   1790006400,
+   "Astrid",
+   "dist",
+   "foot",
+   9000
+  ],
+  [
+   1790006400,
+   "Ragnar",
+   "dist",
+   "foot",
+   9000
+  ],
+  [
+   1790010000,
+   "Astrid",
+   "dist",
+   "foot",
+   9000
+  ],
+  [
+   1790010000,
+   "Astrid",
+   "dmg",
+   "Eikthyr",
+   200
+  ],
+  [
+   1790010000,
+   "Astrid",
+   "dw",
+   "Bow>Eikthyr",
+   200
+  ],
+  [
+   1790010000,
+   "Astrid",
+   "kill",
+   "Eikthyr",
+   1
+  ],
+  [
+   1790010000,
+   "Ragnar",
+   "dist",
+   "foot",
+   9000
+  ],
+  [
+   1790010000,
+   "Ragnar",
+   "dmg",
+   "Eikthyr",
+   300
+  ],
+  [
+   1790010000,
+   "Ragnar",
+   "dw",
+   "AxeFlint>Eikthyr",
+   300
+  ],
+  [
+   1790010000,
+   "Ragnar",
+   "kill",
+   "Eikthyr",
+   1
+  ],
+  [
+   1790013600,
+   "Astrid",
+   "dist",
+   "foot",
+   1950
+  ],
+  [
+   1790013600,
+   "Ragnar",
+   "dist",
+   "foot",
+   1950
+  ]
+ ],
+ "generated": 1790097200,
+ "id": "test",
+ "interval": 60,
+ "maintenance": [
+  [
+   1790046000,
+   1790047800,
+   "update"
+  ]
+ ],
+ "online": [
+  "Bjorn"
+ ],
+ "peaks": [
+  [
+   1789999200,
+   "Astrid",
+   "hp",
+   95.0
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "hit",
+   22.0
+  ],
+  [
+   1789999200,
+   "Ragnar",
+   "hp",
+   110.0
+  ],
+  [
+   1790002800,
+   "Astrid",
+   "hp",
+   95.0
+  ],
+  [
+   1790002800,
+   "Ragnar",
+   "hp",
+   110.0
+  ],
+  [
+   1790006400,
+   "Astrid",
+   "hp",
+   95.0
+  ],
+  [
+   1790006400,
+   "Ragnar",
+   "hp",
+   110.0
+  ],
+  [
+   1790010000,
+   "Astrid",
+   "hp",
+   95.0
+  ],
+  [
+   1790010000,
+   "Ragnar",
+   "hp",
+   110.0
+  ],
+  [
+   1790013600,
+   "Astrid",
+   "hp",
+   95.0
+  ],
+  [
+   1790013600,
+   "Ragnar",
+   "hp",
+   110.0
+  ],
+  [
+   1790085600,
+   "Bjorn",
+   "hp",
+   80.0
+  ],
+  [
+   1790089200,
+   "Bjorn",
+   "hp",
+   80.0
+  ],
+  [
+   1790092800,
+   "Bjorn",
+   "hp",
+   80.0
+  ]
+ ],
+ "raids": [
+  {
+   "n": "army_eikthyr",
+   "players": [
+    "Astrid",
+    "Ragnar"
+   ],
+   "t": 1790011400
+  }
+ ],
+ "restarts": [
+  1790000000,
+  1790086400
+ ],
+ "samples": [
+  [
+   1790014460,
+   0,
+   1000
+  ]
+ ],
+ "sessions": [
+  {
+   "deaths": 1,
+   "e": 1790014400,
+   "end": "logout",
+   "p": "Ragnar",
+   "s": 1790000060,
+   "spawns": 2
+  },
+  {
+   "deaths": 0,
+   "e": 1790014430,
+   "end": "logout",
+   "p": "Astrid",
+   "s": 1790000120,
+   "spawns": 1
+  },
+  {
+   "deaths": 0,
+   "e": null,
+   "end": "online",
+   "p": "Bjorn",
+   "s": 1790086460,
+   "spawns": 1
+  }
+ ],
+ "support": {
+  "label": "Support",
+  "url": "https://example.com/support"
+ },
+ "title": "Test Valheim",
+ "tz": "Europe/Berlin",
+ "version": "l-1.0.16",
+ "visits": [
+  [
+   1790001500,
+   "Ragnar",
+   "Crypt3",
+   780,
+   -560,
+   400
+  ]
+ ],
+ "zones": [
+  {
+   "by": [
+    "Ragnar"
+   ],
+   "exact": true,
+   "l": [
+    "Crypt3"
+   ],
+   "t": 1790000900,
+   "x": 12,
+   "y": -9
+  },
+  {
+   "by": [
+    "Ragnar"
+   ],
+   "exact": true,
+   "l": [],
+   "t": 1790000960,
+   "x": 13,
+   "y": -9
+  },
+  {
+   "by": [
+    "Ragnar"
+   ],
+   "exact": true,
+   "l": [],
+   "t": 1790001020,
+   "x": 13,
+   "y": -8
+  }
+ ]
+}

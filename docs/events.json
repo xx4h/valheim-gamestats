@@ -1,0 +1,689 @@
+{
+ "_": [
+  "The contract between the plugin, the collector and the page: every event the plugin sends (from: its source",
+  "file in plugin/), what the collector makes of it (becomes) and which stat on the page shows it, and every",
+  "data.json key with where it comes from. tests: the collector tests that cover it.",
+  "tests/collector/test_contract.py keeps this true: the plugin can't send an event that isn't here, nothing here",
+  "goes untested, and data.json has exactly these keys (test_build). New event or stat: add it here first."
+ ],
+ "events": {
+  "pick": {
+   "from": "Gather.cs",
+   "becomes": "gather",
+   "page": "Collected (first pickups only since 1.11.0)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Gathering.test_picked_up_per_hour"
+   ]
+  },
+  "fell": {
+   "from": "Gather.cs",
+   "becomes": "gather",
+   "page": "Felled",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "mine": {
+   "from": "Gather.cs",
+   "becomes": "gather",
+   "page": "Mined",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "loot": {
+   "from": "Loot.cs",
+   "becomes": "gather",
+   "page": "Looted from world chests",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_golden.Golden.test_golden"
+   ],
+   "since": "1.11.0"
+  },
+  "kill": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Kills",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Combat.test_kill_every_attacker",
+    "test_events.Sync.test_archive_up_to_the_store"
+   ]
+  },
+  "kw": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Kills per weapon and creature",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Combat.test_kill_per_weapon"
+   ]
+  },
+  "wkill": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Kills per weapon",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "dmg": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Damage dealt; boss fights",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_fights.Fights.test_fight_damage_per_player"
+   ]
+  },
+  "dw": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Damage per weapon and creature; boss fights",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_fights.Fights.test_fight_damage_per_player"
+   ]
+  },
+  "wdmg": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Damage per weapon",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event"
+   ]
+  },
+  "taken": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Damage taken",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Combat.test_damage_taken_summed"
+   ]
+  },
+  "hit": {
+   "from": "Combat.cs",
+   "becomes": "gather",
+   "page": "Hits taken",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "dist": {
+   "from": "Vitals.cs",
+   "becomes": "gather",
+   "page": "Distance by foot / swim / boat / ride",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_golden.Golden.test_golden"
+   ],
+   "since": "1.14.0"
+  },
+  "crouch": {
+   "from": "Vitals.cs",
+   "becomes": "gather",
+   "page": "Seconds sneaking",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event"
+   ],
+   "since": "1.14.0"
+  },
+  "exh": {
+   "from": "Vitals.cs",
+   "becomes": "gather",
+   "page": "Seconds without stamina",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event"
+   ],
+   "since": "1.14.0"
+  },
+  "exhn": {
+   "from": "Vitals.cs",
+   "becomes": "gather",
+   "page": "Times out of stamina",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event"
+   ],
+   "since": "1.14.0"
+  },
+  "emote": {
+   "from": "Vitals.cs",
+   "becomes": "gather",
+   "page": "Emotes",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event"
+   ],
+   "since": "1.14.0"
+  },
+  "bed": {
+   "from": "Vitals.cs",
+   "becomes": "gather",
+   "page": "Nights in bed",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event"
+   ],
+   "since": "1.14.0"
+  },
+  "take": {
+   "from": "Custody.cs",
+   "becomes": "custody",
+   "page": "Who has it (item pages)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_custody_move",
+    "test_rebuild.Gathering.test_gear_moved"
+   ],
+   "since": "1.12.0"
+  },
+  "put": {
+   "from": "Custody.cs",
+   "becomes": "custody",
+   "page": "Who has it (item pages)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_custody_move"
+   ],
+   "since": "1.12.0"
+  },
+  "off": {
+   "from": "Custody.cs",
+   "becomes": "custody",
+   "page": "Who has it (item pages)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_custody_move"
+   ],
+   "since": "1.12.0"
+  },
+  "on": {
+   "from": "Custody.cs",
+   "becomes": "custody",
+   "page": "Who has it (item pages)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_custody_move"
+   ],
+   "since": "1.12.0"
+  },
+  "carry": {
+   "from": "Gather.cs",
+   "becomes": "custody",
+   "page": "Who has it (item pages)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_custody_move"
+   ],
+   "since": "1.12.0"
+  },
+  "peak": {
+   "from": "Vitals.cs",
+   "becomes": "peaks",
+   "page": "Max health / stamina / eitr, highest point, top speed, biggest hit",
+   "tests": [
+    "test_rebuild.Body.test_peak_is_the_highest_not_a_sum"
+   ],
+   "since": "1.14.0"
+  },
+  "sprint": {
+   "from": "Vitals.cs",
+   "becomes": "feats",
+   "page": "Feats: sprint",
+   "tests": [
+    "test_rebuild.Body.test_feats"
+   ],
+   "since": "1.14.0"
+  },
+  "closecall": {
+   "from": "Vitals.cs",
+   "becomes": "feats",
+   "page": "Feats: closecall",
+   "tests": [
+    "test_rebuild.Body.test_feats"
+   ],
+   "since": "1.14.0"
+  },
+  "fall": {
+   "from": "Vitals.cs",
+   "becomes": "feats",
+   "page": "Feats: fall",
+   "tests": [
+    "test_rebuild.Body.test_feats"
+   ],
+   "since": "1.14.0"
+  },
+  "enter": {
+   "from": "Dungeons.cs",
+   "becomes": "visits",
+   "page": "Dungeon visits",
+   "tests": [
+    "test_rebuild.Exploration.test_dungeon_entered"
+   ],
+   "since": "1.13.0"
+  },
+  "leave": {
+   "from": "Dungeons.cs",
+   "becomes": "visits",
+   "page": "Dungeon visits (seconds inside)",
+   "tests": [
+    "test_rebuild.Exploration.test_dungeon_entered"
+   ],
+   "since": "1.13.0"
+  },
+  "zone": {
+   "from": "Zones.cs",
+   "becomes": "zones",
+   "page": "Zones discovered, by whom (exact)",
+   "tests": [
+    "test_rebuild.Exploration.test_zone_exact_credits_only_the_players_near",
+    "test_events.FromTheStore.test_zone_with_its_location"
+   ],
+   "since": "1.15.0"
+  },
+  "petdeath": {
+   "from": "Pets.cs",
+   "becomes": "pets",
+   "page": "Pet deaths",
+   "tests": [
+    "test_rebuild.Combat.test_pet_killed_is_no_kill",
+    "test_build.Build.test_pets"
+   ],
+   "since": "1.6.0"
+  },
+  "pethp": {
+   "from": "Pets.cs",
+   "becomes": "pets",
+   "page": "Pet health history",
+   "tests": [
+    "test_rebuild.Combat.test_pet_killed_is_no_kill",
+    "test_build.Build.test_pets"
+   ],
+   "since": "1.7.0"
+  },
+  "login": {
+   "from": "Server.cs",
+   "becomes": "sessions",
+   "page": "Steam account of a character (achievements)",
+   "tests": [
+    "test_events.FromTheStore.test_login_names_the_account"
+   ],
+   "since": "1.17.0"
+  },
+  "spawn": {
+   "from": "Server.cs",
+   "becomes": "sessions",
+   "page": "Sessions, playtime",
+   "tests": [
+    "test_events.FromTheStore.test_login_names_the_account",
+    "test_rebuild.Presence.test_session_spawn_to_teardown"
+   ],
+   "since": "1.17.0"
+  },
+  "logout": {
+   "from": "Server.cs",
+   "becomes": "sessions",
+   "page": "Sessions, playtime",
+   "tests": [
+    "test_events.FromTheStore.test_death_and_logout",
+    "test_rebuild.Presence.test_session_spawn_to_teardown"
+   ],
+   "since": "1.17.0"
+  },
+  "death": {
+   "from": "Server.cs",
+   "becomes": "deaths",
+   "page": "Deaths",
+   "tests": [
+    "test_events.FromTheStore.test_death_and_logout",
+    "test_rebuild.Presence.test_death_is_the_destroyed_character"
+   ],
+   "since": "1.17.0"
+  },
+  "start": {
+   "from": "Server.cs",
+   "becomes": "restarts",
+   "page": "Restarts, uptime, game version; backend (PlayFab/Steamworks) since 1.20.0",
+   "tests": [
+    "test_events.FromTheStore.test_login_names_the_account",
+    "test_rebuild.Presence.test_session_ends_on_restart"
+   ],
+   "since": "1.17.0"
+  },
+  "stop": {
+   "from": "Server.cs",
+   "becomes": "restarts",
+   "page": "Sessions end at a clean stop; crash alerts",
+   "tests": [
+    "test_events.FromTheStore.test_stop_ends_sessions_at_once",
+    "test_events.Health.test_crash"
+   ],
+   "since": "1.17.0"
+  },
+  "server": {
+   "from": "Server.cs",
+   "becomes": "samples",
+   "page": "Players online over time, outages, world clock",
+   "tests": [
+    "test_events.FromTheStore.test_server_samples_and_clock",
+    "test_events.Health.test_heartbeat"
+   ],
+   "since": "1.17.0"
+  },
+  "sleep": {
+   "from": "Server.cs",
+   "becomes": "days",
+   "page": "In-game days, world clock",
+   "tests": [
+    "test_events.FromTheStore.test_sleep_day"
+   ],
+   "since": "1.17.0"
+  },
+  "raid": {
+   "from": "Server.cs",
+   "becomes": "raids",
+   "page": "Raids, who was there",
+   "tests": [
+    "test_events.FromTheStore.test_raid_near",
+    "test_rebuild.Presence.test_raid_lists_everyone_online"
+   ],
+   "since": "1.17.0"
+  },
+  "raidend": {
+   "from": "Server.cs",
+   "becomes": "nothing",
+   "page": "Bookkeeping",
+   "tests": [
+    "test_events.FromTheStore.test_bookkeeping_is_not_gathered"
+   ],
+   "since": "1.17.0"
+  },
+  "plugin": {
+   "from": "Plugin.cs",
+   "becomes": "health",
+   "page": "Plugin version (boss fight accuracy); hooks applied since 1.19.0",
+   "tests": [
+    "test_fights.Fights.test_fight_before_plugin_1_5_is_not_exact",
+    "test_events.Health.test_hooks_missing",
+    "test_health.Checks.test_version"
+   ]
+  },
+  "warn": {
+   "from": "Events.cs",
+   "becomes": "health",
+   "page": "Admin alerts",
+   "tests": [
+    "test_events.Health.test_warn_events",
+    "test_health.Checks.test_plugin_error_zero_rva"
+   ],
+   "since": "1.17.0"
+  },
+  "lobby": {
+   "from": "Server.cs",
+   "becomes": "health",
+   "page": "Admin alert unjoinable: the crossplay session didn't become active",
+   "tests": [
+    "test_events.Health.test_unjoinable",
+    "test_events.FromTheStore.test_bookkeeping_is_not_gathered"
+   ],
+   "since": "1.20.0"
+  }
+ },
+ "legacy": {
+  "platform": {
+   "from": "server log (history before 1.17.0)",
+   "becomes": "sessions",
+   "page": "Steam account of the character that spawned next",
+   "tests": [
+    "test_rebuild.Presence.test_platform_pairs_with_the_next_spawn",
+    "test_build.Build.test_steam"
+   ]
+  },
+  "location": {
+   "from": "server log (history before 1.17.0)",
+   "becomes": "zones",
+   "page": "Zones before plugin 1.15.0 (everyone online credited)",
+   "tests": [
+    "test_rebuild.Exploration.test_zone_before_plugin_credits_everyone_online"
+   ]
+  }
+ },
+ "data": {
+  "id": {
+   "from": "config",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "title": {
+   "from": "config",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "game": {
+   "from": "config",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "tz": {
+   "from": "config",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "interval": {
+   "from": "config",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "generated": {
+   "from": "collector",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "first": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "maintenance": {
+   "from": "config",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "support": {
+   "from": "config",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "version": {
+   "from": "events: start",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "online": {
+   "from": "events: sessions",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "sessions": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "deaths": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "raids": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "days": {
+   "from": "events: sleep",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "day": {
+   "from": "clock",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "clock": {
+   "from": "events / save / RCON",
+   "tests": [
+    "test_golden.Golden.test_golden",
+    "test_build.Build.test_live_from_rcon"
+   ]
+  },
+  "restarts": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "zones": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "samples": {
+   "from": "events: server",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "gather": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "custody": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "visits": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "peaks": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "feats": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden"
+   ]
+  },
+  "fights": {
+   "from": "events",
+   "tests": [
+    "test_golden.Golden.test_golden",
+    "test_fights.Fights.test_fight_damage_per_player"
+   ]
+  },
+  "world": {
+   "from": "world save (Pelican)",
+   "tests": [
+    "test_build.Build.test_world",
+    "test_world.Snapshot.test_pieces_credited_to_the_creator"
+   ]
+  },
+  "world_history": {
+   "from": "world saves",
+   "tests": [
+    "test_build.Build.test_world_history"
+   ]
+  },
+  "pets": {
+   "from": "world saves + events",
+   "tests": [
+    "test_build.Build.test_pets"
+   ]
+  },
+  "terrain": {
+   "from": "plugin's terrain sample (Pelican)",
+   "tests": [
+    "test_build.Build.test_terrain"
+   ]
+  },
+  "positions": {
+   "from": "RCON players",
+   "tests": [
+    "test_build.Build.test_live_from_rcon",
+    "test_rcon.Update.test_positions_only_for_public"
+   ]
+  },
+  "equipment": {
+   "from": "RCON equipment + tombstones",
+   "tests": [
+    "test_build.Build.test_live_from_rcon",
+    "test_rcon.Update.test_gear_and_usage"
+   ]
+  },
+  "portals_live": {
+   "from": "RCON portals",
+   "tests": [
+    "test_build.Build.test_live_from_rcon",
+    "test_rcon.Update.test_portals_live"
+   ]
+  },
+  "keys_live": {
+   "from": "RCON globalKeys",
+   "tests": [
+    "test_build.Build.test_live_from_rcon"
+   ]
+  },
+  "key_times": {
+   "from": "RCON globalKeys",
+   "tests": [
+    "test_rcon.Update.test_keys_first_seen_between_polls",
+    "test_build.Build.test_every_key_the_page_reads"
+   ]
+  },
+  "steam": {
+   "from": "Steam Web API",
+   "tests": [
+    "test_build.Build.test_steam",
+    "test_steam.Steam.test_public_names_characters_not_accounts"
+   ]
+  },
+  "cards": {
+   "from": "notify.py (Discord feed)",
+   "tests": [
+    "test_build.Build.test_cards"
+   ]
+  },
+  "scoring": {
+   "from": "scoring.json and the config's scoring overrides (scoring.py)",
+   "tests": [
+    "test_scoring.Publish.test_in_the_data"
+   ]
+  }
+ }
+}

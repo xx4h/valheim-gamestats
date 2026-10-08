@@ -1,0 +1,121 @@
+# One pod, two containers sharing the volume: `collector` refreshes each server's data every minute, `web` serves
+# the page plus those files. A sidecar loop rather than a CronJob: a CronJob pod could not mount an RWO volume that `web`
+# holds on another node.
+{{- $secret := .Values.secrets.existingSecret }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vg.fullname" . }}
+  labels: {{- include "vg.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "vg.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vg.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
+      annotations:
+        checksum/config: {{ include "vg.config" . | sha256sum }}
+        checksum/nginx: {{ include "vg.nginx" . | sha256sum }}
+        {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{ end }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- range . }}
+        - name: {{ . }}{{ end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: collector
+          image: "{{ .Values.image.collector.repository }}:{{ .Values.image.collector.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.collector.pullPolicy }}
+          env:
+            - name: CONFIG
+              value: /config/config.json
+            - name: DATA_DIR
+              value: /data
+            {{- if $secret }}
+            {{- $keys := .Values.secrets.keys }}
+            - name: PELICAN_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: {{ $keys.pelicanApiKey }}, optional: true } }
+            - name: STEAM_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: {{ $keys.steamApiKey }}, optional: true } }
+            - name: GS_ALERTS_WEBHOOK
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: {{ $keys.alertsWebhook }}, optional: true } }
+            {{- range $s := .Values.servers }}
+            {{- if $s.rcon }}
+            - name: {{ include "vg.env" (list $s.id "RCON_PASSWORD") }}
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: {{ include "vg.key" (list $keys.rcon $s.id) }}, optional: true } }
+            {{- end }}
+            {{- if $s.notify }}
+            - name: {{ include "vg.env" (list $s.id "DISCORD_WEBHOOK") }}
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: {{ include "vg.key" (list $keys.discordWebhook $s.id) }}, optional: true } }
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.collector.extraEnv }}{{ toYaml . | nindent 12 }}{{ end }}
+          resources: {{- toYaml .Values.collector.resources | nindent 12 }}
+          securityContext: &restricted
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /config/config.json
+              subPath: config.json
+            - name: data
+              mountPath: /data
+            {{- with .Values.collector.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
+        - name: web
+          image: "{{ .Values.image.web.repository }}:{{ .Values.image.web.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.web.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 30
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext: *restricted
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "vg.fullname" . }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "vg.fullname" .)) }}
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.collector.extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

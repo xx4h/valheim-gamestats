@@ -1,0 +1,19 @@
+{{- if not .Values.persistence.existingClaim }}
+# Events + rendered pages per server. events.db is the only copy of history older than what the plugin's store keeps
+# (90 days): kept when the release is uninstalled.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "vg.fullname" . }}-data
+  labels: {{- include "vg.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+{{- end }}

@@ -1,0 +1,4 @@
+# game/BepInEx DLLs copied from the server, and build output
+lib/
+bin/
+obj/

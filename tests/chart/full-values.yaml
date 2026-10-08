@@ -1,0 +1,52 @@
+# Every option set, for CI's helm lint / template (tests/chart/check.sh). Example values only.
+fullnameOverride: stats
+siteName: Example game stats
+imagePullSecrets: [registry]
+collector:
+  timezone: Europe/Berlin
+  pluginVersion: 1.20.11
+  extraVolumes:
+    - { name: game, persistentVolumeClaim: { claimName: valheim-server, readOnly: true } }
+  extraVolumeMounts:
+    - { name: game, mountPath: /game, readOnly: true }
+scoring:
+  impact: { bonus: { built: 30, dist: 5 }, penalty: { deaths: 0 } }
+  titles: { ragequit: { enabled: false }, marathon: { min: 7200 } }
+servers:
+  - id: first
+    title: First Valheim
+    hosts: [stats.example.com, www.stats.example.com]
+    maintenance:
+      - { from: "2026-01-01T10:00:00Z", to: "2026-01-01T10:30:00Z", note: Update }
+    world:
+      panel: http://panel.panel.svc.cluster.local
+      panelHost: panel.example.com
+      gateway: http://gateway.panel.svc.cluster.local:8080
+      server: abcd1234
+      dir: .config/unity3d/IronGate/Valheim/worlds_local/Dedicated
+      manifest: valheim_server_Data/StreamingAssets/SoftRef/manifest_extended
+      interval: 3600
+    rcon: { host: first-0.game.svc.cluster.local, port: 25575 }
+    steam: { app: 892970, interval: 600 }
+    notify: { url: https://stats.example.com }
+    support: { url: https://example.com/support, label: Support us }
+  - id: second
+    hosts: [second.example.com]
+    world:
+      path: /game
+      dir: worlds_local/Dedicated
+      manifest: valheim_server_Data/StreamingAssets/SoftRef/manifest_extended
+      events: custom/BepInEx/gamestats/events
+    rcon: { host: second-0.game.svc.cluster.local }
+    scoring:
+      badges: { slayer: { steps: [5, 50, 500, 5000, 50000] } }
+secrets:
+  existingSecret: gamestats
+persistence:
+  storageClass: fast
+ingresses:
+  - name: web
+    className: traefik
+    annotations: { cert-manager.io/cluster-issuer: letsencrypt }
+    tls: true
+podLabels: { team: games }

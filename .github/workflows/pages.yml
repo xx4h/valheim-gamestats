@@ -1,0 +1,48 @@
+# The demo on GitHub Pages: seven made-up Vikings, ~350 in-game days (demo/generate.py), on the page as it is on main,
+# and the README's animation recorded from it (demo/showcase.sh: showcase.webp, desktop and phone side by side, next to
+# the page). Built again every day, so the demo's history always ends today.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.63.0-noble  # Chromium and Python for the tour; same as the site tests
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y ffmpeg webp
+      - run: python3 demo/generate.py _site
+      - run: cd tests/site && npm ci --no-audit --no-fund
+      - run: demo/showcase.sh _site _site
+        env:
+          HOME: /root  # the browsers in the image expect its own home
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d  # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5.0.1

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vg.fullname" . }}
+  labels: {{- include "vg.labels" . | nindent 4 }}
+data:
+  config.json: |
+{{ include "vg.config" . | indent 4 }}
+  default.conf: |
+{{ include "vg.nginx" . | indent 4 }}

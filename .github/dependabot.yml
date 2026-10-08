@@ -1,0 +1,16 @@
+# The GitHub Actions the workflows use are pinned to commit hashes (the version as a comment): Dependabot moves the
+# hash and the comment together, once a week, in one pull request.
+#
+# Not here: the Containerfiles' base images (Dependabot only reads files named Dockerfile), and tests/site's
+# @playwright/test, which must match the Playwright image the workflows run in — both are updated by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

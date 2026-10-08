@@ -1,0 +1,104 @@
+# Every day: is there a new Valheim dedicated server build, and does the released plugin still fit it?
+#
+# A new game version doesn't need a new plugin release — the DLL contains nothing of the game and finds its methods by
+# name when it loads — only the answer whether every hook still fits. So on a new Steam build this builds the plugin
+# against it and runs tests/plugin (every hook against the game's methods and fields):
+#   fits   → the latest release's notes get "Also tested with Steam build N", and the build is remembered as tested
+#   broken → this run fails (GitHub mails the owner) and an issue names it; the fix is a normal release
+name: game
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: game
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write  # the release notes
+      issues: write    # a broken build
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      STEAM_DIR: ${{ github.workspace }}/../valheim-server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - id: game
+        run: echo "build=$(plugin/game-build.sh)" >> "$GITHUB_OUTPUT"
+      # a cache entry per build that passed: its existence is the memory of what was tested
+      - id: tested
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .game-tested
+          key: game-tested-${{ steps.game.outputs.build }}
+          lookup-only: true
+      - if: steps.tested.outputs.cache-hit == 'true'
+        run: echo "Steam build ${{ steps.game.outputs.build }} was tested already"
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.STEAM_DIR }}
+          key: valheim-server-${{ steps.game.outputs.build }}
+          restore-keys: valheim-server-
+      - if: steps.tested.outputs.cache-hit != 'true'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: "8.0.x"
+      # the released plugin's source: the newest release tag
+      - if: steps.tested.outputs.cache-hit != 'true'
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ -n "$tag" ]; then git fetch --depth=1 origin "refs/tags/$tag:refs/tags/$tag" && git checkout -q "$tag"; fi
+      - if: steps.tested.outputs.cache-hit != 'true'
+        id: test
+        run: |
+          set -o pipefail
+          plugin/fetch-refs.sh
+          (cd plugin && dotnet build -c Release -nologo -warnaserror) 2>&1 | tee build.log
+          (cd tests/plugin && dotnet run) 2>&1 | tee test.log
+      - if: steps.tested.outputs.cache-hit != 'true' && steps.test.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+          BUILD: ${{ steps.game.outputs.build }}
+        run: |
+          mkdir -p .game-tested && echo "$BUILD" > .game-tested/build
+          if [ -n "$TAG" ]; then
+            gh release view "$TAG" --json body -q .body > notes.md
+            printf '\n- Also tested with the Valheim dedicated server, Steam build %s (%s): every hook fits.\n' "$BUILD" "$(date -u +%F)" >> notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          fi
+      - if: steps.tested.outputs.cache-hit != 'true' && steps.test.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .game-tested
+          key: game-tested-${{ steps.game.outputs.build }}
+      - if: failure() && steps.test.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+          BUILD: ${{ steps.game.outputs.build }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Valheim Steam build $BUILD breaks the plugin ($TAG)"
+          if gh issue list --state open --search "in:title \"$title\"" --json number -q '.[0].number' | grep -q .; then exit 0; fi
+          {
+            echo "The daily game check built ${TAG:-main} against the current dedicated server (Steam build $BUILD) and it failed: $RUN"
+            echo
+            echo '```'
+            grep -h -E "error|FAIL|failed|missing" build.log test.log 2>/dev/null | head -40
+            echo '```'
+            echo
+            echo "Running servers keep working: a hook that no longer fits switches itself off (the collector alerts \`hooks\`)."
+          } > issue.md
+          gh issue create --title "$title" --body-file issue.md

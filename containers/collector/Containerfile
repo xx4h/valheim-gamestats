@@ -1,0 +1,8 @@
+# The collector: the valheim_gamestats package, standard library only — nothing to install. The config (servers,
+# intervals) comes from the chart at /config/config.json.
+FROM docker.io/library/python:3.14.8-alpine
+LABEL org.opencontainers.image.source="https://github.com/xx4h/valheim-gamestats" org.opencontainers.image.licenses="MIT"
+COPY collector/valheim_gamestats/ /app/valheim_gamestats/
+ENV CONFIG=/config/config.json DATA_DIR=/data PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
+USER 101:101
+ENTRYPOINT ["python3", "-u", "-m", "valheim_gamestats"]
