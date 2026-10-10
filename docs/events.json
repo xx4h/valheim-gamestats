@@ -63,6 +63,24 @@
     "test_rebuild.Combat.test_kill_per_weapon"
    ]
   },
+  "sdw": {
+   "from": "CombatCore.cs",
+   "becomes": "gather",
+   "page": "Summons (player page): damage per summon variant and creature",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Combat.test_summon_variants_summed"
+   ]
+  },
+  "skw": {
+   "from": "CombatCore.cs",
+   "becomes": "gather",
+   "page": "Summons (player page): kills per summon variant and creature",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Combat.test_summon_variants_summed"
+   ]
+  },
   "ukill": {
    "from": "CombatCore.cs",
    "becomes": "gather",

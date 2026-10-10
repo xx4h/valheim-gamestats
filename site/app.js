@@ -325,7 +325,7 @@
     for (const [t, p, e, i, n] of d.gather || []) {
       if (t < a || t >= b || (only && p !== only) || !per.has(p)) continue;
       const r = per.get(p);
-      const key = { dist: 'dist', crouch: 'crouch', exh: 'exh', exhn: 'exhn', emote: 'emotes', bed: 'beds', pick: 'picked', loot: 'looted', fell: 'felled', mine: 'mined', kill: 'kills', dmg: 'dealt', taken: 'taken', hit: 'hitsTaken', cost: 'paid', wkill: 'wkills', wdmg: 'wdealt', kw: 'kwc', dw: 'dwc' }[e];
+      const key = { dist: 'dist', crouch: 'crouch', exh: 'exh', exhn: 'exhn', emote: 'emotes', bed: 'beds', pick: 'picked', loot: 'looted', fell: 'felled', mine: 'mined', kill: 'kills', dmg: 'dealt', taken: 'taken', hit: 'hitsTaken', cost: 'paid', sdw: 'sdealt', skw: 'skills', wkill: 'wkills', wdmg: 'wdealt', kw: 'kwc', dw: 'dwc' }[e];
       if (!key) continue;
       r[key] = (r[key] || 0) + n;
       (r.gathered ||= {})[key] ||= new Map();
@@ -2735,6 +2735,7 @@
           card('Damage dealt', 'By creature', gBars(['dealt'], 'No damage dealt in range.', 'creature'), 'span-6'),
           card('Damage by weapon', 'Health removed, in range', gBars(['wdealt'], 'No damage dealt in range.', 'item'), 'span-6'),
           card('Kills by weapon', 'In range', gBars(['wkills'], 'No kills in range.', 'item'), 'span-6'),
+          summonsCard(r),
           card('Collected', 'Items picked up, by kind', gBars(['picked'], 'Nothing picked up in range.', 'item'), 'span-6'),
           card('Felled & mined', 'Trees, rocks and ore deposits', gBars(['felled', 'mined'], 'Nothing felled or mined in range.'), 'span-6'),
           ...bodyCards(p, r),
@@ -3031,6 +3032,30 @@
           el('p', { class: 'explain', text: UNACCOUNTED_TEXT })), 'span-6'),
         card('All of them', 'per hour and creature', table, 'span-6', search)),
     ];
+  }
+
+  // ---- summons a player fought with: by race (the creature) and type (what it held), from the plugin's sdw / skw
+  // ("Skeleton_Friendly:skeleton_sword2+ShieldWood>Bonemass": kind, held items, the creature it hit)
+  function summonsCard(r) {
+    const rows = new Map();
+    for (const [key, field] of [['sdealt', 'd'], ['skills', 'k']])
+      for (const [i, n] of r.gathered?.[key] || []) {
+        const v = i.slice(0, i.lastIndexOf('>'));
+        const row = rows.get(v) || rows.set(v, { v, d: 0, k: 0 }).get(v);
+        row[field] += n;
+      }
+    if (!rows.size) return null;
+    const list = [...rows.values()].map((x) => {
+      const [kind, held = ''] = x.v.split(':');
+      const type = held ? held.split('+').map(itemName).join(' + ') : '–';
+      return { ...x, race: gatherLabel(kind), type, _search: `${gatherLabel(kind)} ${type}`.toLowerCase() };
+    });
+    const best = [...list].sort((a, b) => b.d - a.d)[0];
+    const { table } = sortableTable([{ label: 'Summon', key: 'race' }, { label: 'Type', key: 'type' }, { label: 'Damage', key: 'd', r: true },
+      { label: 'Kills', key: 'k', r: true }], list, { key: 'd', asc: false, q: '', limit: 50 }, (x) => el('tr', null,
+      el('td', { text: x.race }), el('td', { text: x.type }), el('td', { class: 'r', text: nf(x.d) }), el('td', { class: 'r', text: nf(x.k) })),
+    'No summons in range.');
+    return card('Summons', `Best: ${best.race} · ${best.type} — ${nf(best.d)} damage`, table, 'span-12');
   }
 
   function worldView(r) {

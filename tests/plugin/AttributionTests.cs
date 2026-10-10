@@ -3,6 +3,7 @@
 //   blood magic   a health-cost attack's cost is health paid, not damage taken
 //   deaths        health 0, a ragdoll of its own kind (several kinds can share one), or its own loot from the same client
 //   evidence      who killed it: the attacker list, the game's kill note, a routed hit, one's own attack just before in reach
+//   summons       a summon's attack in reach, or its routed hit, counts for the player it follows, under its name
 //   unaccounted   a death with no evidence for its killer is `ukill` (no player), never guessed from who is near
 using System;
 using System.Collections.Generic;
@@ -320,6 +321,123 @@ static partial class CombatTests
             s.Core.Tick(110f, L(Leif(2)));
             check(s.Get("kill", "Leif", "Hare") == 1 && s.Get("kill", "Astrid", "Hare") == 1 && s.Sum("kill", "Ragnar") == 0,
                 "evidence (group): both players who struck it get the kill, the one standing next to it who didn't, nothing");
+        }
+
+        // ======== summons: they fight for the player they follow ========
+        var tick = Off(Here, 0);
+        var gjall = Off(Here, 15);
+        {
+            // a recorded session: a melee skeleton (1.6 m) kills a Tick nobody else touched; the Gjall 15 m away drops at the same time
+            var s = New();
+            s.Core.Attack(331f, "M", "StaffFireball");
+            s.Core.Summon(332.5f, "1795:77", "Skeleton_Friendly", "attack", "M", Off(tick, 1.6f));
+            s.Core.CreatureHealth(333f, "1795:996", "Tick", tick, 50f, 8f, L());
+            s.Core.CreatureHealth(333.3f, "1795:996", "Tick", tick, 8f, 0f, L());
+            s.Core.CreatureHealth(333f, "1:2147", "Gjall", gjall, 1213f, 1196f, L(M(Off(Here, 25))));
+            s.Core.Destroyed(333.3f, "1795:996", "Tick", false, tick, 0f, 50f, L(), L(M(Off(Here, 25))), by: Client);
+            s.Core.Tick(340f, L(M(Off(Here, 25))));
+            check(Near(s.Get("dmg", "M", "Tick"), 50) && Near(s.Get("dw", "M", "Skeleton_Friendly>Tick"), 50)
+                    && s.Get("kill", "M", "Tick") == 1 && s.Get("wkill", "M", "Skeleton_Friendly") == 1,
+                "summons: a summon's attack in reach: its player gets the damage and the kill, under the summon's name");
+            check(s.Get("dw", "M", "Skeleton_Friendly>Gjall") == 0 && Near(s.Get("dw", "M", "StaffFireball>Gjall"), 17),
+                "summons guard: a melee summon 15 m away gets no share of that creature");
+        }
+        {
+            // one arrow, two creatures in reach with drops in its window: it explains one of them only
+            var s = New();
+            s.Core.Summon(100f, "1795:88", "Skeleton_Friendly", "attack_bow", "M", Off(Here, -10));
+            s.Core.CreatureHealth(101.4f, "1:1", "Neck", Off(Here, 0), 30f, 0f, L());
+            s.Core.CreatureHealth(101.5f, "1:2", "Neck", Off(Here, 3), 30f, 10f, L());
+            var arrows = s.Get("dw", "M", "Skeleton_Friendly>Neck");
+            check(Near(arrows, 30) || Near(arrows, 20), "summons (I2): a single-target summon attack explains one creature's drop");
+            check(arrows <= 30, "summons guard (I2): never more than one drop per single-target attack");
+        }
+        {
+            // group: Ragnar fights the Troll; Astrid's skeleton attacks it too, in reach — one share each
+            var s = New();
+            var ragnar = P("Ragnar", Off(Here, 2), held: "SwordIron");
+            s.Core.Attack(10f, "Ragnar", "SwordIron");
+            s.Core.Summon(10.2f, "2:5", "Skeleton_Friendly", "attack", "Astrid", Off(Here, 1.5f));
+            s.Core.CreatureHealth(11f, "1:1", "Troll", Here, 600f, 520f, L(ragnar));
+            check(Near(s.Get("dmg", "Ragnar", "Troll"), 40) && Near(s.Get("dw", "Astrid", "Skeleton_Friendly>Troll"), 40),
+                "summons (group): a player's attack and another player's summon attack in the window: one share each");
+        }
+        {
+            var s = New();
+            var ragnar = P("Ragnar", Off(Here, 2), held: "SwordIron");
+            s.Core.Attack(10f, "Ragnar", "SwordIron");
+            s.Core.Summon(10.2f, "2:5", "Skeleton_Friendly", "attack", "Astrid", Off(Here, 20));
+            s.Core.CreatureHealth(11f, "1:1", "Troll", Here, 600f, 520f, L(ragnar));
+            check(Near(s.Get("dmg", "Ragnar", "Troll"), 80) && s.Sum("dmg", "Astrid") == 0,
+                "summons guard (I1): another player's skeleton fighting 20 m away takes nothing from my creature");
+        }
+        {
+            var s = New();
+            var ragnar = P("Ragnar", Off(Here, 2), held: "SwordIron");
+            s.Core.Attack(5f, "Ragnar", "SwordIron");
+            s.Core.Summon(6f, "2:5", "Skeleton_Friendly", "attack", "Astrid", Off(Here, 1.5f));
+            s.Core.CreatureHealth(11f, "1:1", "Troll", Here, 520f, 510f, L(ragnar)); // a burn tick: nobody attacked in the window
+            check(Near(s.Get("dmg", "Ragnar", "Troll"), 10) && s.Sum("dmg", "Astrid") == 0,
+                "summons guard: damage no attack explains (damage over time) never goes to a summon");
+        }
+        {
+            var s = New();
+            s.Core.Summon(10.2f, "2:5", "Skeleton_Friendly", "attack", "Astrid", Off(Here, 1.5f));
+            s.Core.CreatureHealth(11f, "1:1", "Boar", Here, 30f, 0f, L());
+            s.Core.Destroyed(11.1f, "1:1", "Boar", false, Here, 0f, 30f, L(), L(P("Ragnar", Off(Here, 3))), by: Client);
+            s.Core.Tick(20f, L(P("Ragnar", Off(Here, 3))));
+            check(s.Get("kill", "Astrid", "Boar") == 1, "summons: a summon's kill counts for its player even while they're offline or far away");
+            check(s.Sum("kill", "Ragnar") == 0 && s.Sum("dmg", "Ragnar") == 0, "summons guard (I1): the bystander next to it gets nothing");
+        }
+        {
+            // a recorded session, the Gjall: the player fought it themselves, their archer helped — the kill is with their own weapon
+            var s = New();
+            var m = M(Off(Here, 25));
+            s.Core.Attack(440.4f, "M", "StaffFireball");
+            s.Core.Summon(441f, "1:888", "Skeleton_Friendly", "attack_bow", "M", Off(Here, -12));
+            s.Core.CreatureHealth(442.2f, "1:2147", "Gjall", Here, 35f, 0f, L(m));
+            s.Core.Destroyed(442.2f, "1:2147", "Gjall", false, Here, 0f, 1500f, L(m), L(m), by: Client);
+            s.Core.Tick(450f, L(m));
+            check(s.Get("kill", "M", "Gjall") == 1 && s.Get("wkill", "M", "StaffFireball") == 1 && s.Get("wkill", "M", "Skeleton_Friendly") == 0,
+                "summons guard: a player on the list who also had a summon on it gets one kill, with their own weapon");
+            check(Near(s.Get("dw", "M", "StaffFireball>Gjall") + s.Get("dw", "M", "Skeleton_Friendly>Gjall"), 35),
+                "summons: … and the drop is shared between their own attack and their summon's");
+        }
+        {
+            // a recorded session, Tick#1002: one-hit by a skeleton (health never synced, nobody on its list), loot right after; the
+            // player was casting fireballs at the Gjall at the time — those are no evidence for the Tick
+            var s = New();
+            var tick2 = Off(Here, 0);
+            s.Core.Attack(335.3f, "M", "StaffFireball");
+            s.Core.Summon(335.8f, "1:889", "Skeleton_Friendly", "attack", "M", Off(tick2, 2.6f));
+            s.Core.Destroyed(336.3f, "1795:1002", "Tick", false, tick2, null, 50f, L(), L(M(Off(Here, 20))), by: Client);
+            s.Core.Loot(336.35f, Client + ":904", "GiantBloodSack", Client, Off(tick2, 0.4f));
+            s.Core.Tick(345f, L(M(Off(Here, 20))));
+            check(s.Get("kill", "M", "Tick") == 1 && Near(s.Get("dw", "M", "Skeleton_Friendly>Tick"), 50) && s.Get("dw", "M", "StaffFireball>Tick") == 0,
+                "summons + deaths: a summon's one-hit kill seen by its loot: the kill and its health for the player, all under the summon");
+        }
+
+        {
+            // a recorded session: a skeleton's hit on an enemy Skeleton run by another client, routed with the summon as
+            // attacker, killed it — nobody on its list
+            var s = New();
+            s.Core.SummonHit(8655f, "1:77001", "M", "Skeleton_Friendly", 59f);
+            s.Core.CreatureHealth(8655.1f, "1:77001", "Skeleton", Here, 40f, 0f, L());
+            s.Core.Destroyed(8655.2f, "1:77001", "Skeleton", false, Here, 0f, 40f, L(), L(M(Off(Here, 30))), by: Owner);
+            s.Core.Tick(8665f, L(M(Off(Here, 30))));
+            check(s.Get("kill", "M", "Skeleton") == 1 && s.Get("wkill", "M", "Skeleton_Friendly") == 1 && s.Sum("ukill", "") == 0,
+                "summons: a summon's routed hit is exact evidence — the kill for its player, under the summon");
+        }
+        {
+            // the variant travels with the summon: totals under its kind, per variant in sdw / skw
+            var s = New();
+            s.Core.Summon(332.5f, "1795:77", "Skeleton_Friendly", "attack", "M", Off(Here, 1.6f), "skeleton_sword2+ShieldWood");
+            s.Core.CreatureHealth(333f, "1795:996", "Tick", Here, 50f, 0f, L());
+            s.Core.Destroyed(333.3f, "1795:996", "Tick", false, Here, 0f, 50f, L(), L(M(Off(Here, 25))), by: Client);
+            s.Core.Tick(340f, L(M(Off(Here, 25))));
+            check(Near(s.Get("dw", "M", "Skeleton_Friendly>Tick"), 50) && Near(s.Get("sdw", "M", "Skeleton_Friendly:skeleton_sword2+ShieldWood>Tick"), 50)
+                  && s.Get("skw", "M", "Skeleton_Friendly:skeleton_sword2+ShieldWood>Tick") == 1 && s.Get("wkill", "M", "Skeleton_Friendly") == 1,
+                "summons: by kind as the weapon, and by variant (what it holds) in sdw / skw");
         }
     }
 }

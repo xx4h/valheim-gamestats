@@ -312,3 +312,25 @@ test('unaccounted kills: their own page, never a player', async ({ page }) => {
   await expect(page.locator('#sidenav a[href="#/unaccounted"], nav a[href="#/unaccounted"]').first()).toBeAttached();
   expect(errors).toEqual([]);
 });
+
+test('summons: by race and type on the player page', async ({ page }) => {
+  const errors = watch(page);
+  const p = players[0];
+  let added = false;
+  await page.route('**/c/*', async (route) => {
+    const body = await (await route.fetch()).json();
+    if (!added && Array.isArray(body.gather) && body.gather.length) {
+      added = true;
+      const t = Math.max(...body.gather.map((g) => g[0]));
+      body.gather.push([t, p, 'sdw', 'Skeleton_Friendly:skeleton_sword2+ShieldWood>Bonemass', 595],
+        [t, p, 'skw', 'Skeleton_Friendly:skeleton_sword2+ShieldWood>Bonemass', 1], [t, p, 'sdw', 'Skeleton_Friendly:skeleton_bow>Neck', 30]);
+    }
+    await route.fulfill({ json: body });
+  });
+  await start(page, `#/p/${encodeURIComponent(p)}/combat`);
+  const card = page.locator('section.card', { has: page.getByRole('heading', { name: 'Summons' }) });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Best:');
+  await expect(card.locator('tbody tr')).toHaveCount(2);  // two variants, the creatures they hit summed
+  expect(errors).toEqual([]);
+});

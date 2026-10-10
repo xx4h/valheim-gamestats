@@ -69,11 +69,14 @@ namespace ValheimGamestats
         internal const float Keep = 30f;          // seconds of attack history per player
         internal const float LootRange = 3f;      // a corpse-less death's loot drops at its centre: horizontally (a boss's is metres up)
         internal const float LootSeconds = 2f;    // … in the same frame as the death; its deletion and the item arrive close together
-        internal const float HurtSeconds = 10f;
+        internal const float HurtSeconds = 10f;   // a deletion this soon after damage that no signal explains: `gone`
         internal const float NoteSeconds = 3f;    // a kill note and its creature's deletion: sent in the same frame, routed apart
         internal const float MeleeSeconds = 1.5f; // a swing lands well within this
         internal const float MeleeMargin = 4f;    // positions are centres; players lunge
-        internal const float MeleeReach = 3f;     // a weapon the meta doesn't know   // a deletion this soon after damage that no signal explains: `gone`
+        internal const float MeleeReach = 3f;     // a weapon the meta doesn't know
+        internal const float SummonReach = 3f;    // a summon attack whose reach the meta doesn't know: melee
+        internal const float SummonMargin = 2f;   // reach counts to the target's surface, positions are centres
+        internal const float SummonKillSeconds = 10f; // a summon's hit this long before the death makes its player a killer
         internal const float CostSeconds = 2f;    // a health-cost attack's cost arrives in the next sync, well within this
         internal const float CostSkillMin = 0.67f; // cost × (1 − 0.33 × skill factor): at skill 100 a third less
         internal const float CostFactorDefault = (1f + CostSkillMin) / 2f; // until a clean cost showed the player's own
@@ -104,6 +107,18 @@ namespace ValheimGamestats
             public bool Credited;
             public List<PlayerState> Players; // every online player when it was deleted (for the attack evidence)
             public List<string> Listed;  // its attacker list as it was (also the dead and far away): for the investigation log
+            public Dictionary<string, string> Via; // killers by their summon only: player → the summon's kind
+        }
+
+        // A summon's or commanded tame's attack: for its player, in reach of one creature only (the first it explains).
+        private class SummonAttack
+        {
+            public float Time;
+            public string Kind;
+            public string Follow;
+            public Vec Pos;
+            public float Reach;
+            public string Target;
         }
 
         private class Corpse
@@ -128,6 +143,10 @@ namespace ValheimGamestats
         private readonly Dictionary<string, HashSet<string>> _hitBy = new Dictionary<string, HashSet<string>>(); // creature uid → players with a routed hit
         private readonly HashSet<(string Player, float Time)> _usedAttacks = new HashSet<(string, float)>(); // evidence for one death each
         private HashSet<string> _withRagdoll = new HashSet<string>(); // kinds whose death spawns a ragdoll (Meta)
+        private readonly List<SummonAttack> _summons = new List<SummonAttack>();
+        private readonly Dictionary<string, Dictionary<string, (float Time, string Kind)>> _via =
+            new Dictionary<string, Dictionary<string, (float, string)>>(); // creature uid → players whose summons hit it
+        private readonly Dictionary<string, Dictionary<string, string>> _killVia = new Dictionary<string, Dictionary<string, string>>(); // at health 0
         private readonly Dictionary<string, List<(float Time, string Weapon, float Flat, float Percent)>> _costs =
             new Dictionary<string, List<(float, string, float, float)>>(); // health-cost attacks whose cost hasn't shown yet
         private readonly Dictionary<string, float> _costFactor = new Dictionary<string, float>(); // per player: 1 − 0.33 × skill factor
@@ -149,9 +168,14 @@ namespace ValheimGamestats
                 _withRagdoll.UnionWith(kinds);
         }
 
-        // A summon or commanded tame (`follow`: its player) started an attack (not used yet).
-        internal void Summon(float t, string uid, string kind, string animation, string follow, Vec pos)
+        // A summon or commanded tame (`follow`: its player) started an attack: it fights for its player.
+        // variant: what it holds ("skeleton_sword2+ShieldWood"); it travels with the kind ("Skeleton_Friendly:skeleton_sword2+…")
+        // and comes out as the summon events sdw / skw, while dmg / kill & co. name the kind only.
+        internal void Summon(float t, string uid, string kind, string animation, string follow, Vec pos, string variant = null)
         {
+            _summons.RemoveAll(a => t - a.Time > Keep);
+            var reach = _meta.Reach.TryGetValue(kind + "/" + animation, out var r) && r > 0f ? r : SummonReach;
+            _summons.Add(new SummonAttack { Time = t, Kind = WithVariant(kind, variant), Follow = follow, Pos = pos, Reach = reach });
         }
 
         // A new item object; `by`: the client that created it (its uid's user part). Loot of a corpse-less death (Tick).
@@ -182,6 +206,18 @@ namespace ValheimGamestats
             if (!_hitBy.TryGetValue(uid, out var players))
                 _hitBy[uid] = players = new HashSet<string>();
             players.Add(player);
+        }
+
+        // A summon's or commanded tame's hit on a creature another client runs (routed, with the summon as attacker): exact
+        // evidence it hit it, for the player it follows.
+        internal void SummonHit(float t, string uid, string follow, string kind, float damage, string variant = null)
+        {
+            kind = WithVariant(kind, variant);
+            if (string.IsNullOrEmpty(follow) || damage <= 0f)
+                return;
+            if (!_via.TryGetValue(uid, out var players))
+                _via[uid] = players = new Dictionary<string, (float, string)>();
+            players[follow] = (t, kind);
         }
 
         // A player started an attack with this weapon (Attacks.cs: the animation trigger). An attack that costs health
@@ -258,17 +294,21 @@ namespace ValheimGamestats
                 _hurt.Clear();
             _hurt[uid] = t;
             var attackers = Fighting(onList, pos);
+            Damage(attackers, mob, lost, t, uid, pos);
             if (afterClamped <= 0f)
             {
                 // The kill is counted when the mob is deleted, which can be seconds later: whoever was in the fight
                 // now keeps the kill even if they die in between (a boss's last hit often takes someone with it).
                 if (_killers.Count > 1000)
+                {
                     _killers.Clear();
-                _killers[uid] = attackers;
-                _diag("death-sync", Prefab(mob), attackers, $"health {before:0.#}→{after:0.#}", pos);
+                    _killVia.Clear();
+                }
+                var via = Via(uid, pos, t, attackers);
+                _killers[uid] = With(attackers, via);
+                _killVia[uid] = via;
+                _diag("death-sync", Prefab(mob), _killers[uid], $"health {before:0.#}→{after:0.#}", pos);
             }
-            if (attackers.Count > 0)
-                Damage(attackers, mob, lost, t);
         }
 
         // A creature was deleted. syncedHealth: its health state (null if it has none), maxHealth likewise.
@@ -283,7 +323,7 @@ namespace ValheimGamestats
                 Time = t,
                 Name = mob,
                 Health = Math.Max(0f, syncedHealth ?? maxHealth ?? 0f),
-                Attackers = _killers.TryGetValue(uid, out var killers) ? killers : Fighting(onList, pos),
+                Via = _killVia.TryGetValue(uid, out var killVia) ? killVia : Via(uid, pos, t, Fighting(onList, pos)),
                 Kind = Prefab(mob),
                 By = by,
                 Listed = Names(onList),
@@ -291,7 +331,10 @@ namespace ValheimGamestats
                 Players = players ?? new List<PlayerState>(),
                 Hurt = _hurt.TryGetValue(uid, out var hurt) && t - hurt <= HurtSeconds,
             };
+            death.Attackers = _killers.TryGetValue(uid, out var killers) ? killers : With(Fighting(onList, pos), death.Via);
             _killers.Remove(uid);
+            _killVia.Remove(uid);
+            _via.Remove(uid);
             _hurt.Remove(uid);
             if (tamed)
             {
@@ -404,8 +447,18 @@ namespace ValheimGamestats
         {
             d.Credited = true;
             var killers = new List<string>(d.Attackers);
+            // killers through their summon only (its kind as the weapon) — unless their own evidence shows they fought it too
+            var via = d.Via == null ? new Dictionary<string, string>() : new Dictionary<string, string>(d.Via);
+            if (_via.TryGetValue(d.Uid ?? "", out var summoned)) // a summon's routed hit just before (exact)
+                foreach (var kv in summoned)
+                    if (d.Time - kv.Value.Time <= SummonKillSeconds && !killers.Contains(kv.Key))
+                    {
+                        via[kv.Key] = kv.Value.Kind;
+                        killers.Add(kv.Key);
+                    }
             void Add(string p)
             {
+                via.Remove(p);
                 if (!killers.Contains(p))
                     killers.Add(p);
             }
@@ -420,9 +473,10 @@ namespace ValheimGamestats
                 foreach (var p in Struck(d, ranged: true)) // a shot from afar: only when nothing closer explains the death
                     Add(p);
             _hitBy.Remove(d.Uid ?? "");
-            Kill(killers, d.Name, d.Time, d.Signal, d);
+            _via.Remove(d.Uid ?? "");
+            Kill(killers, d.Name, d.Time, d.Signal, d, via);
             if (killers.Count > 0 && d.Health > 0f)
-                Damage(killers, d.Name, d.Health, d.Time);
+                Damage(killers, d.Name, d.Health, d.Time, via: via);
         }
 
         // The players the game's kill notes name for this death: from the client that deleted it, of its kind, at the time.
@@ -547,24 +601,36 @@ namespace ValheimGamestats
             return names;
         }
 
-        private void Damage(List<string> attackers, string mob, float amount, float at)
+        // A health drop of `amount` at `at`: one share per attack that can explain it — the attacks in the HitWindow of the
+        // players on the list, and of summons in reach of the creature (uid / pos; each binds to the first creature it
+        // explains: a single target). None (damage over time, a missed trigger): evenly over the list's players, each
+        // with their last weapon (via: players who are killers through their summon only — its kind as the weapon).
+        private void Damage(List<string> attackers, string mob, float amount, float at, string uid = null, Vec? pos = null,
+            Dictionary<string, string> via = null)
         {
             var hits = new List<(string Player, string Weapon)>();
             foreach (var p in attackers)
-                foreach (var weapon in Between(p, at - HitWindow, at))
-                    hits.Add((p, weapon));
+                if (via == null || !via.ContainsKey(p)) // a killer through their summon only: their own swings aren't evidence
+                    foreach (var weapon in Between(p, at - HitWindow, at))
+                        hits.Add((p, weapon));
+            if (uid != null && pos != null)
+                foreach (var a in SummonsAt(uid, pos.Value, at))
+                {
+                    a.Target = uid;
+                    if (!_via.TryGetValue(uid, out var players))
+                        _via[uid] = players = new Dictionary<string, (float, string)>();
+                    players[a.Follow] = (at, a.Kind);
+                    hits.Add((a.Follow, a.Kind));
+                }
             if (hits.Count == 0)
                 foreach (var p in attackers)
-                    hits.Add((p, WeaponOf(p, at)));
+                    hits.Add((p, via != null && via.TryGetValue(p, out var kind) ? kind : WeaponOf(p, at)));
             foreach (var (p, weapon) in hits)
-            {
-                _add("dmg", p, mob, amount / hits.Count);
-                _add("wdmg", p, weapon, amount / hits.Count);
-                _add("dw", p, $"{weapon}>{mob}", amount / hits.Count);
-            }
+                Dealt(p, weapon, mob, amount / hits.Count);
         }
 
-        private void Kill(List<string> attackers, string mob, float at, string signal = null, Death death = null)
+        private void Kill(List<string> attackers, string mob, float at, string signal = null, Death death = null,
+            Dictionary<string, string> via = null)
         {
             Died(mob, death?.Health ?? 0f);
             if (attackers.Count == 0)
@@ -574,11 +640,73 @@ namespace ValheimGamestats
             }
             foreach (var p in attackers)
             {
-                var weapon = WeaponOf(p, at);
+                var weapon = via != null && via.TryGetValue(p, out var kind) ? kind : WeaponOf(p, at);
                 _add("kill", p, mob, 1);
-                _add("wkill", p, weapon, 1);
-                _add("kw", p, $"{weapon}>{mob}", 1);
+                _add("wkill", p, Plain(weapon), 1);
+                _add("kw", p, $"{Plain(weapon)}>{mob}", 1);
+                if (weapon != Plain(weapon))
+                    _add("skw", p, $"{weapon}>{mob}", 1); // a summon's kill, by its variant
             }
+        }
+
+        // Damage dealt by a player — or by their summon: the kind as the weapon, and by its variant (sdw).
+        private void Dealt(string player, string weapon, string mob, float amount)
+        {
+            var plain = Plain(weapon);
+            _add("dmg", player, mob, amount);
+            _add("wdmg", player, plain, amount);
+            _add("dw", player, $"{plain}>{mob}", amount);
+            if (weapon != plain)
+                _add("sdw", player, $"{weapon}>{mob}", amount);
+        }
+
+        private static string WithVariant(string kind, string variant) => string.IsNullOrEmpty(variant) ? kind : kind + ":" + variant;
+
+        // A summon's kind without its variant ("Skeleton_Friendly"); a weapon stays as it is.
+        private static string Plain(string weapon)
+        {
+            var colon = weapon?.IndexOf(':') ?? -1;
+            return colon < 0 ? weapon : weapon.Substring(0, colon);
+        }
+
+        // Summon attacks in the HitWindow before `at`, in reach of a creature at `pos`, not bound to another creature.
+        private List<SummonAttack> SummonsAt(string uid, Vec pos, float at)
+        {
+            var list = new List<SummonAttack>();
+            foreach (var a in _summons)
+                if (a.Time >= at - HitWindow && a.Time <= at && (a.Target == null || a.Target == uid)
+                    && Vec.Distance(a.Pos, pos) <= a.Reach + SummonMargin)
+                    list.Add(a);
+            return list;
+        }
+
+        // The players whose summons hit this creature within SummonKillSeconds before `at` — or, for a one-hit kill whose
+        // health never synced, attacked in reach just before — with their summon's kind; not those who fought it
+        // themselves (on the list): their kill is with their own weapon.
+        private Dictionary<string, string> Via(string uid, Vec pos, float at, List<string> fighting)
+        {
+            var via = new Dictionary<string, string>();
+            if (_via.TryGetValue(uid, out var hits))
+                foreach (var kv in hits)
+                    if (at - kv.Value.Time <= SummonKillSeconds && !fighting.Contains(kv.Key))
+                        via[kv.Key] = kv.Value.Kind;
+            foreach (var a in SummonsAt(uid, pos, at))
+                if (!via.ContainsKey(a.Follow) && !fighting.Contains(a.Follow))
+                {
+                    a.Target = uid;
+                    via[a.Follow] = a.Kind;
+                }
+            return via;
+        }
+
+        // The list's players plus the summoners not on it.
+        private static List<string> With(List<string> attackers, Dictionary<string, string> via)
+        {
+            var all = new List<string>(attackers);
+            foreach (var p in via.Keys)
+                if (!all.Contains(p))
+                    all.Add(p);
+            return all;
         }
 
         // The weapon of their last attack, else what they hold — hands are empty while eating, switching or sheathed.

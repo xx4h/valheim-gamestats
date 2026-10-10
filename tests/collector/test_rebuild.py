@@ -138,6 +138,14 @@ class Combat(unittest.TestCase):
         self.assertEqual(got, [("", "Goblin/GoblinArcher*1", 1), ("", "Tick", 3)])
         self.assertEqual(gather(data, "kill"), 0)
 
+    def test_summon_variants_summed(self):
+        # a summon's damage and kills per variant ("kind:held items>creature"), for the player it follows
+        i = "Skeleton_Friendly:skeleton_sword2+ShieldWood>Bonemass"
+        log = Log().g(120, e="sdw", p="Ragnar", i=i, n=40).g(180, e="sdw", p="Ragnar", i=i, n=25)
+        log.g(190, e="skw", p="Ragnar", i=i, n=1)
+        data = rebuild(log)
+        self.assertEqual(sorted((r[2], r[3], r[4]) for r in data["gather"]), [("sdw", i, 65), ("skw", i, 1)])
+
     def test_damage_taken_summed(self):
         log = Log().g(120, e="taken", p="Ragnar", i="", n=40).g(180, e="taken", p="Ragnar", i="", n=35)
         self.assertEqual(gather(rebuild(log), "taken", "Ragnar"), 75)

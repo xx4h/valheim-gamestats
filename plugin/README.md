@@ -162,7 +162,11 @@ gets how much comes from `Attacks.cs`: every attack starts with an animation
 trigger that passes through the server, matched against the attack animations
 of what the player holds. A health drop is split per attack in the 3 s before
 it, with that attack's weapon; with no attack in that window (damage over time),
-evenly, with each player's last attack weapon. A player's loss is damage
+evenly, with each player's last attack weapon. Summons and commanded tames
+never get on the attacker list; their attack triggers (with their follow
+target) count for that player, under the summon's name, when the summon was in
+reach of the mob (one creature per attack), and a summon's hit in the 10 s
+before a death makes its player a killer. A player's loss is damage
 and one hit taken (a clamp to a lower max health when food wears off is
 skipped), except the cost of their own blood magic: a health-cost attack takes
 (flat + health × percent) × (1 − 0.33 × skill factor) in its first frame, so a
