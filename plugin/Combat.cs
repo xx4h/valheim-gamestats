@@ -21,9 +21,13 @@
 //   a mob deleted with health ≤ 0 (its attackers get the kill), and the
 //   ragdoll every death spawns (a networked object, so it reaches the server
 //   even when a one-hit kill is deleted before its last state is synced).
-//   A ragdoll without a counted death is such a one-hit kill: the attackers
-//   the server knows, else the nearest player within 15 m, get the kill and
-//   the mob's last known health as damage. Names carry the stars: Troll*1.
+//   A ragdoll (only matched to a death of a kind that spawns it) without a counted
+//   death is such a one-hit kill: the attackers
+//   the server knows get the kill and the mob's last known health as damage.
+//   Names carry the stars: Troll*1. A death with nobody to credit is never
+//   guessed from who is near: `ukill` (no player), and a log line to investigate.
+//   Kinds without a ragdoll drop their loot at death instead: a deletion with
+//   health left plus its own loot (drop table, same client, 3 m, 2 s) is a kill.
 // - Tamed creatures are not combat: hitting or butchering a pet is neither damage dealt
 //   nor a kill (Pets.cs logs it instead). Their deaths are still recorded below, as
 //   already counted, so their ragdoll isn't taken for a one-hit kill of the nearest player.
@@ -51,8 +55,8 @@ namespace ValheimGamestats
         private static void Add(string e, string p, string i, double n)
         {
             Gather.Add(e, p, i, n);
-            if (CombatTrace.Enabled && !string.IsNullOrEmpty(p))
-                CombatTrace.Out(e, p, i, n);
+            if (CombatTrace.Enabled && (!string.IsNullOrEmpty(p) || e == "ukill"))
+                CombatTrace.Out(e, p ?? "", i, n);
         }
 
         private static bool Init()
@@ -172,6 +176,14 @@ namespace ValheimGamestats
         // the collector (its filter wants "[Gamestats] {"); read with kubectl logs | grep Gamestats-diag.
         private static void Diag(string what, string name, List<string> attackers, string detail, Vec? at)
         {
+            if (what == "unaccounted")
+            {
+                // always: a kill nobody could be credited with, for investigation (docs/ATTRIBUTION.md, "Unaccounted kills")
+                var where = at == null ? "" : $" at {at.Value.X:0},{at.Value.Z:0}";
+                var nearest = at == null ? null : Gather.NearestPeer(new Vector3(at.Value.X, at.Value.Y, at.Value.Z), 60f);
+                ZLog.Log($"[Gamestats-unaccounted] {name} {detail}{where} nearest player within 60 m: {nearest?.m_playerName ?? "none"}");
+                return;
+            }
             if (!Plugin.Diag || at == null)
                 return;
             var pos = new Vector3(at.Value.X, at.Value.Y, at.Value.Z);

@@ -45,12 +45,13 @@ namespace ValheimGamestats
     }
 
     // What the game's prefabs say, once (the adapter fills it; a trace carries it as "meta"): what the attribution rules
-    // need to know about creatures and items (docs/ATTRIBUTION.md). CombatCore uses the health costs so far.
+    // need to know about creatures and items (docs/ATTRIBUTION.md). CombatCore uses the health costs, ragdolls, loot tables and timed kinds so far.
     internal class CombatMeta
     {
         public readonly Dictionary<string, List<string>> Ragdolls = new Dictionary<string, List<string>>(); // ragdoll → creature kinds
         public readonly Dictionary<string, Dictionary<string, float>> Drops = new Dictionary<string, Dictionary<string, float>>(); // creature → item → chance
         public readonly HashSet<string> Timed = new HashSet<string>(); // deleted on a timer (enemy summons)
+        public readonly HashSet<string> NoRagdoll = new HashSet<string>(); // kinds whose death leaves none (loot at death)
         public readonly Dictionary<string, (float Flat, float Percent)> Costs = new Dictionary<string, (float, float)>(); // "Item/animation" → health cost
         public readonly Dictionary<string, float> Reach = new Dictionary<string, float>(); // "Creature/animation" → reach (m)
     }
@@ -62,8 +63,10 @@ namespace ValheimGamestats
         internal const float HitWindow = 3f;      // swing starts → hit lands → its health sync arrives; arrows fly ~1-2 s
         internal const float MatchSeconds = 6f;
         internal const float SettleSeconds = 3f;  // let the deletion of a ragdoll's mob arrive first
-        internal const float CreditRange = 15f;   // a one-hit kill without known attackers: the nearest player
         internal const float Keep = 30f;          // seconds of attack history per player
+        internal const float LootRange = 3f;      // a corpse-less death's loot drops at its centre
+        internal const float LootSeconds = 2f;    // … in the same frame as the death; its deletion and the item arrive close together
+        internal const float HurtSeconds = 10f;   // a deletion this soon after damage that no signal explains: `gone`
         internal const float CostSeconds = 2f;    // a health-cost attack's cost arrives in the next sync, well within this
         internal const float CostSkillMin = 0.67f; // cost × (1 − 0.33 × skill factor): at skill 100 a third less
         internal const float CostFactorDefault = (1f + CostSkillMin) / 2f; // until a clean cost showed the player's own
@@ -85,6 +88,11 @@ namespace ValheimGamestats
             public float Health;
             public List<string> Attackers;
             public bool Counted;
+            public string Kind;     // its prefab, without stars
+            public long By;         // the client that deleted it (and spawned its loot)
+            public bool Hurt;       // damaged within HurtSeconds before its deletion
+            public bool Decided;    // its loot looked for / reported as `gone`
+            public List<string> Listed;  // its attacker list as it was (also the dead and far away): for the investigation log
         }
 
         private class Corpse
@@ -93,6 +101,7 @@ namespace ValheimGamestats
             public float Time;
             public string Creature;
             public int Level;
+            public string Ragdoll;  // its prefab: Meta.Ragdolls says which kinds it can belong to
         }
 
         private readonly List<Death> _deaths = new List<Death>();
@@ -102,25 +111,41 @@ namespace ValheimGamestats
         private readonly Dictionary<string, List<(float Time, string Weapon)>> _attacks =
             new Dictionary<string, List<(float, string)>>();
         private readonly Dictionary<string, string> _held = new Dictionary<string, string>();
+        private readonly Dictionary<string, float> _hurt = new Dictionary<string, float>(); // creature uid → its latest drop
+        private readonly List<(float Time, string Item, long By, Vec Pos)> _loot = new List<(float, string, long, Vec)>();
+        private HashSet<string> _withRagdoll = new HashSet<string>(); // kinds whose death spawns a ragdoll (Meta)
         private readonly Dictionary<string, List<(float Time, string Weapon, float Flat, float Percent)>> _costs =
             new Dictionary<string, List<(float, string, float, float)>>(); // health-cost attacks whose cost hasn't shown yet
         private readonly Dictionary<string, float> _costFactor = new Dictionary<string, float>(); // per player: 1 − 0.33 × skill factor
 
         private CombatMeta _meta = new CombatMeta();
 
+        // A death counted (credited or unaccounted): its name and the health it still had when deleted — loss that never
+        // synced as a drop (one-hit kills, the last blow). For coverage: lost = synced drops + this.
+        internal Action<string, float> Died = (name, remaining) => { };
+
         // ---- inputs ----------------------------------------------------------------------------------------------
 
         // The prefabs' facts, once.
-        internal void Meta(CombatMeta meta) => _meta = meta ?? new CombatMeta();
+        internal void Meta(CombatMeta meta)
+        {
+            _meta = meta ?? new CombatMeta();
+            _withRagdoll = new HashSet<string>();
+            foreach (var kinds in _meta.Ragdolls.Values)
+                _withRagdoll.UnionWith(kinds);
+        }
 
         // A summon or commanded tame (`follow`: its player) started an attack (not used yet).
         internal void Summon(float t, string uid, string kind, string animation, string follow, Vec pos)
         {
         }
 
-        // A new item object; `by`: the client that created it (its uid's user part) (not used yet: loot of a death).
+        // A new item object; `by`: the client that created it (its uid's user part). Loot of a corpse-less death (Tick).
         internal void Loot(float t, string uid, string item, long by, Vec pos)
         {
+            _loot.RemoveAll(l => t - l.Time > 2 * LootSeconds + SettleSeconds);
+            if (_loot.Count < 1000)
+                _loot.Add((t, item, by, pos));
         }
 
         // A player started an attack with this weapon (Attacks.cs: the animation trigger). An attack that costs health
@@ -193,6 +218,9 @@ namespace ValheimGamestats
             var lost = before - afterClamped;
             if (lost <= 0.01f)
                 return;
+            if (_hurt.Count > 5000)
+                _hurt.Clear();
+            _hurt[uid] = t;
             var attackers = Fighting(onList, pos);
             if (afterClamped <= 0f)
             {
@@ -220,8 +248,13 @@ namespace ValheimGamestats
                 Name = mob,
                 Health = Math.Max(0f, syncedHealth ?? maxHealth ?? 0f),
                 Attackers = _killers.TryGetValue(uid, out var killers) ? killers : Fighting(onList, pos),
+                Kind = Prefab(mob),
+                By = by,
+                Listed = Names(onList),
+                Hurt = _hurt.TryGetValue(uid, out var hurt) && t - hurt <= HurtSeconds,
             };
             _killers.Remove(uid);
+            _hurt.Remove(uid);
             if (tamed)
             {
                 death.Counted = true; // a pet: no kill, but its ragdoll must find this death
@@ -230,7 +263,7 @@ namespace ValheimGamestats
             }
             if ((syncedHealth ?? 1f) <= 0f)
             {
-                Kill(death.Attackers, death.Name, death.Time);
+                Kill(death.Attackers, death.Name, death.Time, "health 0", death);
                 death.Counted = true;
             }
             if (!death.Counted || fromServer)
@@ -240,12 +273,12 @@ namespace ValheimGamestats
         }
 
         // A ragdoll appeared (every death of a kind with one spawns it): the creature it belongs to, its level, where.
-        // ragdoll: its own prefab (not used yet: several kinds can share one).
+        // ragdoll: its own prefab — several kinds can share one; it only matches deaths of those (Meta.Ragdolls).
         internal void Ragdoll(float t, string uid, string creature, int level, Vec pos, string ragdoll = null)
         {
             if (!_seenCorpses.Add(uid))
                 return;
-            _corpses.Add(new Corpse { Pos = pos, Time = t, Creature = creature, Level = level });
+            _corpses.Add(new Corpse { Pos = pos, Time = t, Creature = creature, Level = level, Ragdoll = ragdoll });
         }
 
         // Every second: settle ragdolls against the deletions seen around them. players: every online player now.
@@ -259,27 +292,73 @@ namespace ValheimGamestats
                     continue;
                 _corpses.RemoveAt(k);
                 Death match = null;
+                // only a death of a kind this ragdoll belongs to (a Troll's ragdoll is no Greyling's death); a ragdoll the
+                // meta doesn't know (older traces) matches any kind, as before
+                var kinds = corpse.Ragdoll != null && _meta.Ragdolls.TryGetValue(corpse.Ragdoll, out var own) ? own : null;
                 foreach (var d in _deaths)
                     if (Math.Abs(d.Time - corpse.Time) <= MatchSeconds && Vec.Distance(d.Pos, corpse.Pos) <= MatchRange
+                        && (kinds == null || kinds.Contains(d.Kind))
                         && (match == null || Vec.Distance(d.Pos, corpse.Pos) < Vec.Distance(match.Pos, corpse.Pos)))
                         match = d;
                 if (match == null)
                     _diag("ragdoll-nomatch", corpse.Creature, null, $"level {corpse.Level} at {corpse.Pos.X:0},{corpse.Pos.Z:0}", corpse.Pos);
                 if (match != null && match.Counted)
                     continue; // already a kill via its health
-                var name = corpse.Level > 1 ? $"{corpse.Creature}*{corpse.Level - 1}" : corpse.Creature;
-                var attackers = match?.Attackers.Count > 0 ? match.Attackers : Nearest(players, corpse.Pos);
-                if (attackers.Count == 0)
+                if (match == null)
+                {
+                    // a death whose deletion never showed: nobody to credit, and its kind only as far as the ragdoll
+                    // tells (a shared one: every kind it can belong to, "Goblin/GoblinArcher")
+                    var kind = kinds == null ? corpse.Creature : string.Join("/", kinds);
+                    var who = corpse.Level > 1 ? $"{kind}*{corpse.Level - 1}" : kind;
+                    Died(who, 0f); // its health at death unknown
+                    Unaccounted(who, "ragdoll, no deletion", null, corpse.Pos);
                     continue;
-                Kill(attackers, match?.Name ?? name, match?.Time ?? corpse.Time);
-                if (match != null && match.Health > 0f)
-                    Damage(attackers, match.Name, match.Health, match.Time); // the one-hit kill's damage never synced
-                if (match != null)
-                    match.Counted = true;
+                }
+                Kill(match.Attackers, match.Name, match.Time, "ragdoll", match);
+                if (match.Attackers.Count > 0 && match.Health > 0f)
+                    Damage(match.Attackers, match.Name, match.Health, match.Time); // the one-hit kill's damage never synced
+                match.Counted = true;
             }
+            foreach (var d in _deaths)
+                if (!d.Counted && !d.Decided && now - d.Time >= SettleSeconds && Corpseless(d.Kind))
+                    Settle(d, now);
+            foreach (var d in _deaths)
+                if (now - d.Time > 2 * MatchSeconds + SettleSeconds && !d.Counted && !d.Decided)
+                    Gone(d); // a kind with a ragdoll: none came
             _deaths.RemoveAll(d => now - d.Time > 2 * MatchSeconds + SettleSeconds);
             if (_corpses.Count == 0 && _seenCorpses.Count > 1000)
                 _seenCorpses.Clear();
+        }
+
+        // A kind whose death leaves no ragdoll: the meta says so, or knows the ragdolls and this kind has none.
+        private bool Corpseless(string kind) =>
+            _meta.NoRagdoll.Contains(kind) || (_meta.Ragdolls.Count > 0 && !_withRagdoll.Contains(kind));
+
+        // A corpse-less creature deleted with health left: its own loot (from its drop table, created by the client that
+        // deleted it, at its place, right then) says it died — the kill, and its last health as the damage that never
+        // synced. A creature deleted on a timer (enemy summons) needs health 0. Nothing: `gone`.
+        private void Settle(Death d, float now)
+        {
+            d.Decided = true;
+            if (!_meta.Timed.Contains(d.Kind) && _meta.Drops.TryGetValue(d.Kind, out var table) && d.By != 0
+                && _loot.Exists(l => l.By == d.By && table.ContainsKey(l.Item) && Vec.Distance(l.Pos, d.Pos) <= LootRange
+                                     && l.Time - d.Time >= -LootSeconds / 2 && l.Time - d.Time <= LootSeconds))
+            {
+                d.Counted = true;
+                Kill(d.Attackers, d.Name, d.Time, "loot", d);
+                if (d.Attackers.Count > 0 && d.Health > 0f)
+                    Damage(d.Attackers, d.Name, d.Health, d.Time);
+                return;
+            }
+            Gone(d);
+        }
+
+        // A deletion right after damage that no death signal explains: maybe a kill missed, so it's counted, not dropped.
+        private void Gone(Death d)
+        {
+            d.Decided = true;
+            if (d.Hurt)
+                _add("gone", null, d.Name, 1);
         }
 
         // ---- attack history (Pets.cs asks too) -----------------------------------------------------------------
@@ -317,25 +396,21 @@ namespace ValheimGamestats
             return names;
         }
 
-        // The nearest player with a character within CreditRange (on a tie the later one in the list, as Gather.NearestPeer).
-        private static List<string> Nearest(List<PlayerState> players, Vec pos)
+        // A death with no evidence for who killed it — nobody on its attacker list alive and near, no summon of anyone's
+        // in reach: `ukill`, with no player (the stat "Unaccounted kills"), and a line in the server log with what was
+        // known, to investigate (docs/ATTRIBUTION.md). Never guessed from who happened to be nearby.
+        private void Unaccounted(string mob, string signal, List<string> listed, Vec? pos)
+        {
+            _add("ukill", null, mob, 1);
+            var on = listed == null ? "unknown (no deletion)" : listed.Count == 0 ? "empty" : string.Join(",", listed);
+            _diag("unaccounted", mob, null, $"signal={signal} list={on}", pos);
+        }
+
+        private static List<string> Names(List<PlayerState> players)
         {
             var names = new List<string>();
-            string best = null;
-            var bestDistance = CreditRange;
-            foreach (var p in players)
-            {
-                if (!p.Body)
-                    continue;
-                var d = Vec.Distance(p.Pos, pos);
-                if (d <= bestDistance)
-                {
-                    best = p.Name;
-                    bestDistance = d;
-                }
-            }
-            if (best != null)
-                names.Add(best);
+            foreach (var p in players ?? new List<PlayerState>())
+                names.Add(p.Name + (p.Dead ? "(dead)" : p.Body ? "" : "(no character)"));
             return names;
         }
 
@@ -356,8 +431,14 @@ namespace ValheimGamestats
             }
         }
 
-        private void Kill(List<string> attackers, string mob, float at)
+        private void Kill(List<string> attackers, string mob, float at, string signal = null, Death death = null)
         {
+            Died(mob, death?.Health ?? 0f);
+            if (attackers.Count == 0)
+            {
+                Unaccounted(mob, signal, death?.Listed, death?.Pos);
+                return;
+            }
             foreach (var p in attackers)
             {
                 var weapon = WeaponOf(p, at);
