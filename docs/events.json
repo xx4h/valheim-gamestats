@@ -45,7 +45,7 @@
    "since": "1.11.0"
   },
   "kill": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Kills",
    "tests": [
@@ -55,7 +55,7 @@
    ]
   },
   "kw": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Kills per weapon and creature",
    "tests": [
@@ -64,7 +64,7 @@
    ]
   },
   "wkill": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Kills per weapon",
    "tests": [
@@ -73,7 +73,7 @@
    ]
   },
   "dmg": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Damage dealt; boss fights",
    "tests": [
@@ -82,7 +82,7 @@
    ]
   },
   "dw": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Damage per weapon and creature; boss fights",
    "tests": [
@@ -91,7 +91,7 @@
    ]
   },
   "wdmg": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Damage per weapon",
    "tests": [
@@ -99,7 +99,7 @@
    ]
   },
   "taken": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Damage taken",
    "tests": [
@@ -108,7 +108,7 @@
    ]
   },
   "hit": {
-   "from": "Combat.cs",
+   "from": "CombatCore.cs",
    "becomes": "gather",
    "page": "Hits taken",
    "tests": [

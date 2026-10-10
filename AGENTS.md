@@ -27,6 +27,7 @@ cd tests/site && npm ci && npx playwright test
 tests/chart/check.sh
 cd plugin && dotnet build -c Release -warnaserror
 cd tests/plugin && dotnet run
+cd tests/plugin && dotnet run -- replay <trace.jsonl>   # a recorded session (plugin config Debug/Trace) through CombatCore
 ```
 
 - CI runs the collector tests on Python 3.12 (the oldest it supports) and 3.14 (its image), the latter with coverage —

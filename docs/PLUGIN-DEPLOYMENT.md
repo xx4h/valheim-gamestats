@@ -103,6 +103,7 @@ The new plugin loads at the next restart. Afterwards:
 |---|---|---|
 | `[Debug] Diag` | `false` | diagnostic lines (`[Gamestats-diag]`) in the server log |
 | `[Debug] EventsToLog` | `false` | every event in the server log too, as before 1.18.0 |
+| `[Debug] Trace` | `false` | record what the combat logic sees to `BepInEx/gamestats/trace/<UTC day>.jsonl` — a few MB per session with fights; replay it with `cd tests/plugin && dotnet run -- replay <file>` (see `plugin/CombatTrace.cs`). For a session or two, then off again |
 
 ## Rolling back
 

@@ -45,6 +45,23 @@ the collector credits exactly whom the plugin's line names, no one more, and
 | Damage / hits taken | the player whose health dropped (not a drop to a new, lower max health: food wearing off) | plugin |
 | Pet killed | never a kill or damage dealt; recorded as the pet's death | plugin ≥ 1.8.0 |
 
+### Checks
+
+Every combat rule keeps these, in group fights as much as alone:
+
+- **I1 Evidence per player.** Damage or a kill only from evidence tied to that player: their own attacks, their place
+  on the creature's attacker list, their summons. Never from being nearby alone.
+- **I2 One attack, one target**, unless the attack really hits several (area attacks: fireballs, bombs, atgeir spins).
+- **I3 Each death once**, however many signals report it.
+- **I4 A correction of a player's own numbers looks only at that player.**
+- **I5 Ambiguity stays visible**: what the evidence can't decide between players is split and counted as estimated,
+  not handed to one of them.
+
+The plugin's combat rules (`plugin/CombatCore.cs`) have a scenario test for each rule, in solo and group situations
+(`tests/plugin`). With `[Debug] Trace` on, the plugin records everything those rules are told; `dotnet run -- replay
+<trace.jsonl>` in `tests/plugin` replays a real session through today's rules, checks I1 and I3 on it, and prints per
+creature how much of the health it lost was credited to players (coverage).
+
 ## Gathering & items
 
 | Stat | Credited to | Source |

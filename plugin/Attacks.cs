@@ -18,11 +18,7 @@ namespace ValheimGamestats
 {
     internal static class Attacks
     {
-        private const float Keep = 30f; // seconds of history per player
-
         private static readonly int SetTriggerHash = "SetTrigger".GetStableHashCode();
-        private static readonly Dictionary<string, List<(float Time, string Weapon)>> Recent =
-            new Dictionary<string, List<(float, string)>>();
         private static ItemDrop _unarmed;
         private static readonly HashSet<string> Seen = new HashSet<string>();
 
@@ -55,11 +51,10 @@ namespace ValheimGamestats
                 ZLog.Log($"[Gamestats-diag] trigger {trigger} held={held} -> {weapon ?? "no attack"}");
             if (weapon == null)
                 return;
-            if (!Recent.TryGetValue(peer.m_playerName, out var list))
-                Recent[peer.m_playerName] = list = new List<(float, string)>();
             var now = Time.time;
-            list.RemoveAll(a => now - a.Time > Keep);
-            list.Add((now, weapon));
+            if (CombatTrace.Enabled)
+                CombatTrace.Attack(now, peer.m_playerName, weapon);
+            Combat.Core.Attack(now, peer.m_playerName, weapon, trigger);
         }
 
         // The held item whose primary or secondary attack starts with this animation, "Unarmed" for fists, else null.
@@ -82,26 +77,8 @@ namespace ValheimGamestats
             return null;
         }
 
-        // Attacks by this player in [from, to], oldest first.
-        internal static IEnumerable<string> Between(string player, float from, float to)
-        {
-            if (!Recent.TryGetValue(player, out var list))
-                yield break;
-            foreach (var a in list)
-                if (a.Time >= from && a.Time <= to)
-                    yield return a.Weapon;
-        }
-
-        // The weapon of their latest attack up to `at`, within `Keep` seconds, or null.
-        internal static string Last(string player, float at)
-        {
-            if (!Recent.TryGetValue(player, out var list))
-                return null;
-            for (var k = list.Count - 1; k >= 0; k--)
-                if (list[k].Time <= at && at - list[k].Time <= Keep)
-                    return list[k].Weapon;
-            return null;
-        }
+        // Attacks by this player in [from, to], oldest first (the history is CombatCore's).
+        internal static IEnumerable<string> Between(string player, float from, float to) => Combat.Core.Between(player, from, to);
     }
 
     [HarmonyPatch(typeof(ZRoutedRpc), "HandleRoutedRPC")]
@@ -114,6 +91,9 @@ namespace ValheimGamestats
             try
             {
                 Attacks.OnTrigger(data);
+                CombatFacts.OnTrigger(data);
+                if (data.m_targetPeerID == ZDOMan.GetSessionID())
+                    CombatFacts.OnRpc(data); // a hit on a creature the server runs; the rest pass RouteRpcPatch
             }
             catch (System.Exception e)
             {

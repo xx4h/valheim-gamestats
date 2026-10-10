@@ -46,7 +46,11 @@ namespace ValheimGamestats
             Instance = this;
             Diag = Config.Bind("Debug", "Diag", false, "Diagnostic lines in the server log ([Gamestats-diag])").Value;
             Events.LogToo = Config.Bind("Debug", "EventsToLog", false, "Every event in the server log too ([Gamestats] {…}), as before 1.18.0").Value;
+            CombatTrace.Enabled = Config.Bind("Debug", "Trace", false,
+                "Record what the combat logic sees to BepInEx/gamestats/trace/ (for replaying a session in tests; a few MB per session)").Value;
             Events.Init(Paths.BepInExRootPath);
+            CombatTrace.Warn = msg => Events.Warn("trace", msg);
+            CombatTrace.Init(Paths.BepInExRootPath);
             RconCommandsUtil.RegisterAllCommands(Assembly.GetExecutingAssembly());
             // one class at a time: a game update that breaks one hook disables that hook, not the plugin (and says so)
             var harmony = new Harmony(Guid);

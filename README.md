@@ -121,7 +121,8 @@ plugin attached to the [release](https://github.com/xx4h/valheim-gamestats/relea
     ruff check --config collector/pyproject.toml collector tests/collector tools demo
     cd tests/site && npm ci && npx playwright test          # the page in Chromium, desktop and phone
     tests/chart/check.sh                                    # helm lint + rendered config
-    cd tests/plugin && dotnet run                           # event store + every hook against the game (after a plugin build)
+    cd tests/plugin && dotnet run                           # event store, combat rules, every hook against the game (after a plugin build)
+    cd tests/plugin && dotnet run -- replay <trace.jsonl>   # a recorded session (Debug/Trace) through today's combat rules
 
 - [docs/events.json](docs/events.json) is the contract: every event the plugin sends, what it becomes, which stat
   shows it, and every `data.json` key — each with the tests that cover it. `test_contract.py` scans the plugin's
