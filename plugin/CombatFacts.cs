@@ -153,6 +153,9 @@ namespace ValheimGamestats
             var who = Who(hit.m_attacker);
             if (who != null && who.StartsWith("player:"))
                 Combat.Core.Hit(Time.time, Uid(target), who.Substring(7), hit.m_damage.GetTotalDamage());
+            else if (!hit.m_attacker.IsNone() && ZDOMan.instance.GetZDO(hit.m_attacker) is ZDO summon && summon.GetBool(ZDOVars.s_tamed)
+                     && Follow(summon) is string follow)
+                Combat.Core.SummonHit(Time.time, Uid(target), follow, Gather.PrefabName(summon), hit.m_damage.GetTotalDamage(), Variant(summon));
             if (!CombatTrace.Enabled)
                 return;
             var se = hit.m_statusEffectHash == 0 ? null : ObjectDB.instance?.GetStatusEffect(hit.m_statusEffectHash)?.name ?? hit.m_statusEffectHash.ToString();
@@ -209,7 +212,7 @@ namespace ValheimGamestats
                 CombatTrace.Trigger(Time.time, Uid(zdo), Who(zdo), trigger, follow, tamed, zdo.GetOwner(), Vec(zdo.GetPosition()),
                     ItemName(zdo.GetInt(ZDOVars.s_rightItem)), ItemName(zdo.GetInt(ZDOVars.s_leftItem)));
             if (tamed && follow != null)
-                Combat.Core.Summon(Time.time, Uid(zdo), Gather.PrefabName(zdo), trigger, follow, Vec(zdo.GetPosition()));
+                Combat.Core.Summon(Time.time, Uid(zdo), Gather.PrefabName(zdo), trigger, follow, Vec(zdo.GetPosition()), Variant(zdo));
         }
 
         // ---- world state ---------------------------------------------------------------------------------------------
@@ -266,6 +269,14 @@ namespace ValheimGamestats
         }
 
         private static string Uid(ZDO zdo) => zdo.m_uid.ToString();
+
+        // A summon's variant: what it holds, right hand + left hand ("skeleton_sword2+ShieldWood"), null if nothing.
+        internal static string Variant(ZDO zdo)
+        {
+            var right = ItemName(zdo.GetInt(ZDOVars.s_rightItem));
+            var left = ItemName(zdo.GetInt(ZDOVars.s_leftItem));
+            return right == null ? left : left == null ? right : right + "+" + left;
+        }
 
         // What a character holds (synced like a player's): which variant a summon is (bow, sword, sword + shield).
         private static string ItemName(int hash) => hash == 0 ? null : ZNetScene.instance.GetPrefab(hash)?.name ?? hash.ToString();

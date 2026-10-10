@@ -40,8 +40,9 @@ the collector credits exactly whom the plugin's line names, no one more, and
 
 | Stat | Credited to | Source |
 |---|---|---|
-| Damage dealt | players in the mob's attacker list who attacked within 3 s before the health drop, alive and within 60 m; one share per attack, else split evenly | plugin |
-| Kill | for a death (health ≤ 0, a ragdoll **of its own kind**, the game's kill note for it, or — see below — its own loot): every attacker on its list (alive, within 60 m), and every player the other evidence names: the game's kill note to them, a routed hit of theirs on it, their own damaging attack just before in reach of it (melee: 1.5 s, the weapon's reach + 4 m; ranged: 3 s, 60 m; one attack for one death); credited 3 s after the death; a creature without a ragdoll (Seekers, Ticks, Blobs, bosses …) deleted with health left: a kill when its own loot (its drop table, created by the client that deleted it, within 3 m horizontally — it spawns at the creature's centre, metres up for a boss — and 2 s) appears — not for creatures deleted on a timer (enemy summons) | plugin |
+| Damage dealt | players in the mob's attacker list who attacked within 3 s before the health drop, alive and within 60 m, **and summons / commanded tames whose attack in that window was in reach of the mob** (for the player they follow, under the summon's name; each summon attack explains one creature only); one share per attack, else split evenly over the list's players (never to a summon) | plugin |
+| Kill | for a death (health ≤ 0, a ragdoll **of its own kind**, the game's kill note for it, or — see below — its own loot): every attacker on its list (alive, within 60 m), and every player the other evidence names: the game's kill note to them, a routed hit of theirs on it, their own damaging attack just before in reach of it, a hit of their summon in the 10 s before (under the summon's name, unless they fought it themselves) (melee: 1.5 s, the weapon's reach + 4 m; ranged: 3 s, 60 m; one attack for one death); credited 3 s after the death; a creature without a ragdoll (Seekers, Ticks, Blobs, bosses …) deleted with health left: a kill when its own loot (its drop table, created by the client that deleted it, within 3 m horizontally — it spawns at the creature's centre, metres up for a boss — and 2 s) appears — not for creatures deleted on a timer (enemy summons) | plugin |
+| Summon damage / kills by variant | the player the summon follows: the same damage and kills as under the summon's kind, per variant — what it holds (`Skeleton_Friendly:skeleton_sword2+ShieldWood`) and the creature (events `sdw`, `skw`; page: player → Combat → Summons) | plugin |
 | Damage / hits taken | the player whose health dropped (not a drop to a new, lower max health: food wearing off; not the cost of their own blood magic) | plugin |
 | Health paid | the player whose own health-cost attack (Dead Raiser, Staff of Protection, Trollstav …) took it: the drop right after its trigger, from a third less (blood magic skill) up to the full cost; a hit in the same sync is the rest, as damage taken | plugin |
 | Pet killed | never a kill or damage dealt; recorded as the pet's death | plugin ≥ 1.8.0 |
@@ -58,7 +59,7 @@ kill instead — event `ukill`, no player, the creature as the object — and sh
 kills** (how many, which creatures, when).
 
 Typical causes: traps, turrets and the environment; creatures fighting each other (Dvergers and Seekers in the
-Mistlands); summons (until they are attributed); a
+Mistlands); a
 ragdoll whose deletion never arrived (then the creature is named by every kind that ragdoll can belong to, e.g.
 `Goblin/GoblinArcher`).
 

@@ -28,6 +28,10 @@ static class Replay
         var clients = new Dictionary<string, long>();
         foreach (var j in all.Where(j => S(j, "k") == "destroy" && Has(j, "from") && Has(j, "own")))
             clients[S(j, "from")] = j.GetProperty("own").GetInt64();
+        var holding = new Dictionary<string, string>(); // a summon's uid → what it held at its last attack
+        var follows = new Dictionary<string, string>(); // a summon's uid → the player it follows
+        foreach (var j in all.Where(j => S(j, "k") == "trig" && Has(j, "fol")))
+            follows[S(j, "u")] = S(j, "fol");
         var weaponsSeen = new HashSet<string>(all.Where(j => S(j, "k") == "attack").Select(j => S(j, "w")));
         var core = new CombatCore((e, p, i, n) => Add(now, e, p, i, n));
         Remaining.Clear();
@@ -58,6 +62,9 @@ static class Replay
                         : clients.GetValueOrDefault(S(j, "from")), S(j, "to"), S(j, "kind"));
                     break;
                 case "hit":
+                    if (!(S(j, "am") ?? "").StartsWith("player:") && S(j, "att") is string att && follows.TryGetValue(att, out var fol))
+                        core.SummonHit(F(j, "t"), S(j, "u"), fol, Prefab(S(j, "am")), (float)j.GetProperty("d").EnumerateObject().Sum(d => d.Value.GetDouble()),
+                            holding.GetValueOrDefault(att));
                     if (S(j, "am") is string am && am.StartsWith("player:"))
                         core.Hit(F(j, "t"), S(j, "u"), am.Substring(7), (float)j.GetProperty("d").EnumerateObject().Sum(d => d.Value.GetDouble()));
                     break;
@@ -65,8 +72,10 @@ static class Replay
                     held = (F(j, "t"), S(j, "p"), S(j, "w"));
                     break;
                 case "trig":
+                    if (Variant(j) is string v)
+                        holding[S(j, "u")] = v;
                     if (Has(j, "tamed") && j.GetProperty("tamed").GetBoolean() && S(j, "fol") != null)
-                        core.Summon(F(j, "t"), S(j, "u"), Prefab(S(j, "m")), S(j, "tr"), S(j, "fol"), Pos(j));
+                        core.Summon(F(j, "t"), S(j, "u"), Prefab(S(j, "m")), S(j, "tr"), S(j, "fol"), Pos(j), Variant(j));
                     break;
                 case "drop":
                     core.Loot(F(j, "t"), S(j, "u"), S(j, "i"), long.Parse(S(j, "u").Split(':')[0]), Pos(j));
@@ -194,6 +203,14 @@ static class Replay
 
     // of the last Run: per creature name, the health its counted deaths still had (never synced as drops)
     internal static readonly Dictionary<string, double> Remaining = new Dictionary<string, double>();
+
+    // a summon's variant from an attack line: right + left hand (older traces have neither)
+    private static string Variant(JsonElement j)
+    {
+        var right = Has(j, "rh") ? S(j, "rh") : null;
+        var left = Has(j, "lh") ? S(j, "lh") : null;
+        return right == null ? left : left == null ? right : right + "+" + left;
+    }
 
     private static bool Has(JsonElement j, string k) => j.TryGetProperty(k, out var v) && v.ValueKind != JsonValueKind.Null;
 

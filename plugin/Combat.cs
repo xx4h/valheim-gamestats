@@ -13,6 +13,10 @@
 //   what they hold. The game never takes anyone off the attacker list, so
 //   only attackers alive and within AttackerRange count: someone who died or
 //   left the fight would otherwise keep a share.
+//   Summons and commanded tames (tamed, following a player) never get on the
+//   list: their attack triggers count for the player they follow, under their
+//   own name, when they were in reach of the mob; one creature per attack.
+//   Their hits in the 10 s before a death make that player a killer too.
 // - taken / hit: a player's health drops — the amount, and one hit per drop
 //   (hits inside one sync interval merge; damage-over-time ticks count each).
 //   A drop to exactly the new, lower max health is food wearing off: skipped.
