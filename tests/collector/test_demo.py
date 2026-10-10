@@ -29,7 +29,13 @@ class Demo(unittest.TestCase):
         cls.gen = load_generator()
         cls.dir = tempfile.mkdtemp()
         cls.out = os.path.join(cls.dir, "site")
-        cls.sim = cls.gen.build(cls.out, seed=7, target=120, end=END)
+        # what tools/ extracts from the game, in miniature
+        cls.gamedata = os.path.join(cls.dir, "gamedata")
+        os.makedirs(os.path.join(cls.gamedata, "looks"))
+        for n in ("items.json", "looks/looks.json"):
+            with open(os.path.join(cls.gamedata, n), "w") as f:
+                json.dump({}, f)
+        cls.sim = cls.gen.build(cls.out, seed=7, target=120, end=END, gamedata=cls.gamedata)
         cls.data = test_golden.served(cls.out)
 
     @classmethod
@@ -41,6 +47,10 @@ class Demo(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(self.out, name)), name)
         index = read_json(os.path.join(self.out, "index.json"))
         self.assertTrue(all(os.path.exists(os.path.join(self.out, "c", n)) for n in index["files"]))
+
+    def test_the_games_art_where_a_deployment_serves_it(self):
+        for n in ("items.json", "looks/looks.json"):
+            self.assertTrue(os.path.exists(os.path.join(self.out, "icons", "valheim", n)), n)
 
     def test_a_whole_server(self):
         d = self.data
@@ -56,6 +66,18 @@ class Demo(unittest.TestCase):
         self.assertEqual(d["scoring"]["changed"], {})
         # every prefab named: the manifest the collector reads changes with each save (its time is the save's)
         self.assertEqual([k for k in d["world"]["items"] if k.startswith("#")], [])
+
+    def test_gear(self):
+        # the equipment card and the gear history: every player's last seen gear and look, who wears it now
+        eq = self.data["equipment"]
+        self.assertEqual(sorted(eq), sorted(p["p"] for p in self.gen.PLAYERS))
+        self.assertEqual(sorted(p for p, e in eq.items() if e["online"]), ["Astrid", "Bjorn"])
+        for p, e in eq.items():
+            self.assertTrue({"helmet", "chest", "legs"} <= set(e["slots"]), p)
+            self.assertTrue({"right", "rightBack"} & set(e["slots"]), p)
+            self.assertEqual(set(e["look"]), {"m", "skin", "hair", "h", "b"})
+            self.assertLessEqual(e["t"], END)
+        self.assertTrue(any(len(e["usage"]["helmet"]) > 1 for e in eq.values()))  # gear follows the stages
 
     def test_exploring_together_credits_only_who_was_there(self):
         # the demo keeps the rules it shows off: a zone is credited to players online at the time
