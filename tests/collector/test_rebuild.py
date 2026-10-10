@@ -222,13 +222,6 @@ class Body(unittest.TestCase):
         (_, p, k, v), = rebuild(log)["peaks"]
         self.assertEqual((p, k, v), ("Ragnar", "hp", 120.5))
 
-    def test_skill_levels_among_the_peaks(self):
-        log = Log().g(100, e="skill", p="Ragnar", i="Swords", n=54).g(160, e="skill", p="Ragnar", i="Swords", n=55)
-        log.g(3700, e="skill", p="Ragnar", i="Swords", n=50)  # a later hour, after a death's skill drain
-        got = sorted((t, p, k, v) for t, p, k, v in rebuild(log)["peaks"])
-        self.assertEqual([(p, k, v) for _, p, k, v in got], [("Ragnar", "skill:Swords", 55), ("Ragnar", "skill:Swords", 50)])
-        self.assertFalse([g for g in rebuild(log)["gather"] if g[2] == "skill"])  # never summed
-
     def test_feats(self):
         log = Log().g(100, e="sprint", p="Ragnar", n=1, m=30.4, s=5).g(200, e="fall", p="Astrid", n=1, h=17.3)
         log.g(300, e="closecall", p="Ragnar", n=1, hp=3.2, max=120)

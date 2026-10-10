@@ -499,16 +499,6 @@
     "test_combat.Effective.test_scaled_by_the_players_near",
     "test_fights.Fights.test_fight_effective_damage"
    ]
-  },
-  "skill": {
-   "from": "combat.py",
-   "becomes": "peaks",
-   "page": "Skills seen in combat (player page): a player's level in a skill as their routed hits carry it (arrows and bolts don't) or a blood magic cost shows it (1 - 0.33 * level / 100 of the full cost); the highest per hour, among the peaks as skill:<Skill>",
-   "tests": [
-    "test_combat.Skills.test_from_routed_hits",
-    "test_combat.Skills.test_from_blood_magic",
-    "test_rebuild.Body.test_skill_levels_among_the_peaks"
-   ]
   }
  },
  "legacy": {
