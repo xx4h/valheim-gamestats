@@ -4,7 +4,7 @@
 # run yet fails ("[Gamestats] …: Method has zero rva"); on 2026-10-06 combat went unrecorded for hours that way. The
 # rename swaps the directory entry, the running server keeps the file it has open; the new one loads at the next restart.
 #   NS=<namespace> POD=<game pod> [CONTAINER=game] [ROOT=/home/container] ./deploy.sh [<path to dll> | <release version>]
-# Without an argument: the local build. A version (e.g. 1.21.0): that release's DLL from GitHub (REPO=owner/name to use
+# Without an argument: the local build. A version (e.g. 1.22.0): that release's DLL from GitHub (REPO=owner/name to use
 # another repository's releases).
 set -euo pipefail
 : "${NS:?namespace of the game pod}" "${POD:?game pod}"

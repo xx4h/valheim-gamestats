@@ -4,7 +4,7 @@ siteName: Example game stats
 imagePullSecrets: [registry]
 collector:
   timezone: Europe/Berlin
-  pluginVersion: 1.21.0
+  pluginVersion: 1.22.0
   extraVolumes:
     - { name: game, persistentVolumeClaim: { claimName: valheim-server, readOnly: true } }
   extraVolumeMounts:

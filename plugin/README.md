@@ -274,7 +274,7 @@ outside `plugins/` (BepInEx would load a second copy there), renames it into
 place and checks it arrived intact; the running server keeps the file it has
 open:
 
-    NS=<namespace> POD=<game pod> ./deploy.sh 1.21.0    # a release
+    NS=<namespace> POD=<game pod> ./deploy.sh 1.22.0    # a release
     NS=<namespace> POD=<game pod> ./deploy.sh            # the local build
 
 Then restart the server. `BepInEx/LogOutput.log` should list
