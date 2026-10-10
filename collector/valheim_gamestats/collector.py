@@ -69,7 +69,8 @@ def log(msg):
 
 class Valheim:
     # events that are bookkeeping, not something a player gathered: never summed into "gather"
-    QUIET = {"plugin", "petdeath", "pethp", "warn", "login", "raidend", "lobby", "gone"}
+    # cf: the plugin's combat facts, for the collector's own combat rules (to come)
+    QUIET = {"plugin", "petdeath", "pethp", "warn", "login", "raidend", "lobby", "gone", "cf"}
     BOOT = {"plugin", "start"}  # a new boot: not a sign the old one was still up
     SAMPLE_EVERY = 600  # the server samples every minute; keep one per 10 min (and every change in players online)
 

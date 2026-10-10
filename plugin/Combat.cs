@@ -109,8 +109,7 @@ namespace ValheimGamestats
                 if (victim == null)
                     return;
                 var maxAfter = zdo.GetFloat(ZDOVars.s_maxHealth, maxBefore);
-                if (CombatTrace.Enabled)
-                    CombatTrace.Player(Time.time, victim.m_playerName, before, after, maxBefore, maxAfter);
+                CombatTrace.Player(Time.time, victim.m_playerName, before, after, maxBefore, maxAfter);
                 var taken = Core.PlayerHealth(victim.m_playerName, before, after, maxBefore, maxAfter, Time.time);
                 if (taken > 0f)
                     Vitals.OnPlayerHit(victim.m_playerName, taken, Mathf.Max(0f, after));
@@ -121,8 +120,7 @@ namespace ValheimGamestats
             var mob = MobName(zdo, Gather.PrefabName(zdo));
             var pos = Vec(zdo.GetPosition());
             var onList = OnList(zdo);
-            if (CombatTrace.Enabled)
-                CombatTrace.Health(t, uid, mob, pos, before, after, onList, zdo.GetOwner());
+            CombatTrace.Health(t, uid, mob, pos, before, after, onList, zdo.GetOwner());
             Core.CreatureHealth(t, uid, mob, pos, before, after, onList, zdo.GetOwner());
         }
 
@@ -142,12 +140,9 @@ namespace ValheimGamestats
             var onList = OnList(zdo);
             var players = Players();
             var server = sender == ZDOMan.GetSessionID();
-            if (CombatTrace.Enabled)
-            {
-                CombatTrace.Destroyed(t, uid, mob, tamed, pos, h, mh, onList, players, server, zdo.GetOwner(), CombatFacts.PeerName(sender),
-                    CombatFacts.Follow(zdo));
-                CombatFacts.Forget(zdo);
-            }
+            CombatTrace.Destroyed(t, uid, mob, tamed, pos, h, mh, onList, players, server, zdo.GetOwner(), CombatFacts.PeerName(sender),
+                CombatFacts.Follow(zdo));
+            CombatFacts.Forget(zdo);
             var from = sender == 0 ? "-" : server ? "server" : ZNet.instance.GetPeer(sender)?.m_playerName ?? sender.ToString();
             Core.Destroyed(t, uid, mob, tamed, pos, h, mh, onList, players, server,
                 $"attackersN {zdo.GetInt(ZDOVars.s_attackers)} from={from} owner={zdo.GetOwner()}", zdo.GetOwner());
@@ -162,8 +157,7 @@ namespace ValheimGamestats
             var uid = zdo.m_uid.ToString();
             var level = zdo.GetInt(ZDOVars.s_level, 1);
             var pos = Vec(zdo.GetPosition());
-            if (CombatTrace.Enabled)
-                CombatTrace.Ragdoll(t, uid, creature, level, pos, Gather.PrefabName(zdo));
+            CombatTrace.Ragdoll(t, uid, creature, level, pos, Gather.PrefabName(zdo));
             Core.Ragdoll(t, uid, creature, level, pos, Gather.PrefabName(zdo));
         }
 

@@ -168,6 +168,14 @@
     "test_events.FromTheStore.test_bookkeeping_is_not_gathered"
    ]
   },
+  "cf": {
+   "from": "CombatTrace.cs",
+   "becomes": "nothing",
+   "page": "Not yet: the plugin's combat facts (field k: meta0 / meta parts, attack, player, health, trig, hit, killnote, destroy, ragdoll, drop — the trace's shapes), stored for the collector's combat rules to come; nothing is summed from them",
+   "tests": [
+    "test_events.FromTheStore.test_bookkeeping_is_not_gathered"
+   ]
+  },
   "dist": {
    "from": "Vitals.cs",
    "becomes": "gather",

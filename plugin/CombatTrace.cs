@@ -37,7 +37,8 @@ namespace ValheimGamestats
     internal static class CombatTrace
     {
         internal static bool Enabled;
-        internal static Action<string> Warn = _ => { };  // Events.Warn in the game; no game types here (tests/plugin compiles this)
+        internal static Action<string> Warn = _ => { };
+        internal static Action<string> Fact;  // Events.Emit in the game: the facts the collector's combat rules need  // Events.Warn in the game; no game types here (tests/plugin compiles this)
         private static string _dir;
         private static string _day;
         private static StreamWriter _out;
@@ -55,75 +56,79 @@ namespace ValheimGamestats
             _out = null;
         }
 
-        internal static void Attack(float t, string player, string weapon) =>
-            Write(new StringBuilder("{\"k\":\"attack\"").Num("t", t).Str("p", player).Str("w", weapon));
+        internal static void Attack(float t, string player, string weapon, string animation = null) =>
+            Write(new StringBuilder("{\"k\":\"attack\"").Num("t", t).Str("p", player).Str("w", weapon).Str("an", animation), fact: true);
 
         internal static void Player(float t, string player, float before, float after, float maxBefore, float maxAfter) =>
             Write(new StringBuilder("{\"k\":\"player\"").Num("t", t).Str("p", player).Num("b", before).Num("a", after).Num("mb", maxBefore)
-                .Num("ma", maxAfter));
+                .Num("ma", maxAfter), fact: !(maxAfter < maxBefore - 0.01f && Math.Abs(after - maxAfter) < 0.01f)); // food wearing off: no fact
 
         internal static void Health(float t, string uid, string mob, Vec pos, float before, float after, List<PlayerState> onList,
             long owner = 0) =>
             Write(new StringBuilder("{\"k\":\"health\"").Num("t", t).Str("u", uid).Str("m", mob).Pos(pos).Num("b", before)
-                .Num("a", after).Players("l", onList).Num("own", owner));
+                .Num("a", after).Players("l", onList).Num("own", owner), fact: true);
 
         internal static void Destroyed(float t, string uid, string mob, bool tamed, Vec pos, float? health, float? maxHealth,
             List<PlayerState> onList, List<PlayerState> players, bool fromServer, long owner = 0, string from = null, string follow = null) =>
             Write(new StringBuilder("{\"k\":\"destroy\"").Num("t", t).Str("u", uid).Str("m", mob).Bool("tamed", tamed).Pos(pos)
                 .Num("h", health).Num("mh", maxHealth).Players("l", onList).Players("ps", players).Bool("srv", fromServer)
-                .Num("own", owner).Str("from", from).Str("fol", follow));
+                .Num("own", owner).Str("from", from).Str("fol", follow), fact: true);
 
         internal static void Meta(List<string> noRagdoll, CombatMeta meta)
         {
-            var sb = new StringBuilder("{\"k\":\"meta\"").Num("v", 2).Key("noragdoll").Append('[');
-            for (var i = 0; i < noRagdoll.Count; i++)
-                sb.Append(i > 0 ? "," : "").Append(Quote(noRagdoll[i]));
-            sb.Append(']').Key("ragdolls").Append('{');
-            var n = 0;
-            foreach (var kv in meta.Ragdolls)
+            // every section as its entries ("name" or "key":value), an array or an object
+            var sections = new List<(string Key, bool Array, List<string> Entries)>
             {
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(":[");
-                for (var c = 0; c < kv.Value.Count; c++)
-                    sb.Append(c > 0 ? "," : "").Append(Quote(kv.Value[c]));
-                sb.Append(']');
-            }
-            sb.Append('}').Key("cost").Append('{');
-            n = 0;
-            foreach (var kv in meta.Costs)
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(":{\"f\":").Append(F(kv.Value.Flat)).Append(",\"p\":")
-                    .Append(F(kv.Value.Percent)).Append('}');
-            sb.Append('}').Key("drops").Append('{');
-            n = 0;
-            foreach (var kv in meta.Drops)
+                ("noragdoll", true, noRagdoll.ConvertAll(Quote)),
+                ("ragdolls", false, Each(meta.Ragdolls, kv => Quote(kv.Key) + ":[" + string.Join(",", kv.Value.ConvertAll(Quote)) + "]")),
+                ("cost", false, Each(meta.Costs, kv => Quote(kv.Key) + ":{\"f\":" + F(kv.Value.Flat) + ",\"p\":" + F(kv.Value.Percent) + "}")),
+                ("drops", false, Each(meta.Drops, kv => Quote(kv.Key) + ":{" + string.Join(",",
+                    Each(kv.Value, i => Quote(i.Key) + ":" + F(i.Value))) + "}")),
+                ("timed", true, Each(meta.Timed, Quote)),
+                ("reach", false, Each(meta.Reach, kv => Quote(kv.Key) + ":" + F(kv.Value))),
+                ("names", false, Each(meta.Names, kv => Quote(kv.Key) + ":" + Quote(kv.Value))),
+                ("dots", false, Each(meta.Dots, kv => Quote(kv.Key) + ":" + F(kv.Value))),
+                ("weapons", false, Each(meta.Weapons, kv => Quote(kv.Key) + ":{\"ranged\":" + (kv.Value.Ranged ? "true" : "false")
+                    + ",\"reach\":" + F(kv.Value.Reach) + ",\"harmful\":" + (kv.Value.Harmful ? "true" : "false") + "}")),
+            };
+            // the trace: one line
+            var sb = new StringBuilder("{\"k\":\"meta\"").Num("v", 2);
+            foreach (var (key, array, entries) in sections)
+                sb.Key(key).Append(array ? '[' : '{').Append(string.Join(",", entries)).Append(array ? ']' : '}');
+            Write(sb, fact: false);
+            // the store: a start, then parts small enough for a reply — {"k":"meta","s":<section>,"d":[…] or {…}}
+            Write(new StringBuilder("{\"k\":\"meta0\"").Num("v", 2), fact: true);
+            foreach (var (key, array, entries) in sections)
             {
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(":{");
-                var d = 0;
-                foreach (var item in kv.Value)
-                    sb.Append(d++ > 0 ? "," : "").Append(Quote(item.Key)).Append(':').Append(F(item.Value));
-                sb.Append('}');
+                var part = new List<string>();
+                var size = 0;
+                void Flush()
+                {
+                    Write(new StringBuilder("{\"k\":\"meta\"").Str("s", key).Key("d").Append(array ? '[' : '{')
+                        .Append(string.Join(",", part)).Append(array ? ']' : '}'), fact: true, trace: false);
+                    part.Clear();
+                    size = 0;
+                }
+                foreach (var entry in entries)
+                {
+                    if (size + entry.Length > MetaPart && part.Count > 0)
+                        Flush();
+                    part.Add(entry);
+                    size += entry.Length + 1;
+                }
+                if (part.Count > 0)
+                    Flush();
             }
-            sb.Append('}').Key("timed").Append('[');
-            n = 0;
-            foreach (var kind in meta.Timed)
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kind));
-            sb.Append(']').Key("reach").Append('{');
-            n = 0;
-            foreach (var kv in meta.Reach)
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(':').Append(F(kv.Value));
-            sb.Append('}').Key("names").Append('{');
-            n = 0;
-            foreach (var kv in meta.Names)
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(':').Append(Quote(kv.Value));
-            sb.Append('}').Key("dots").Append('{');
-            n = 0;
-            foreach (var kv in meta.Dots)
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(':').Append(F(kv.Value));
-            sb.Append('}').Key("weapons").Append('{');
-            n = 0;
-            foreach (var kv in meta.Weapons)
-                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(":{\"ranged\":").Append(kv.Value.Ranged ? "true" : "false")
-                    .Append(",\"reach\":").Append(F(kv.Value.Reach)).Append(",\"harmful\":").Append(kv.Value.Harmful ? "true" : "false").Append('}');
-            Write(sb.Append('}'));
+        }
+
+        private const int MetaPart = 2500; // well inside one store reply (EventStore: ~3.8 KB with its header)
+
+        private static List<string> Each<T>(IEnumerable<T> items, Func<T, string> f)
+        {
+            var list = new List<string>();
+            foreach (var item in items)
+                list.Add(f(item));
+            return list;
         }
 
         private static string F(float v) => ((double)v).ToString("R", CultureInfo.InvariantCulture);
@@ -131,7 +136,7 @@ namespace ValheimGamestats
         internal static void Trigger(float t, string uid, string who, string trigger, string follow, bool tamed, long owner, Vec pos,
             string right = null, string left = null) =>
             Write(new StringBuilder("{\"k\":\"trig\"").Num("t", t).Str("u", uid).Str("m", who).Str("tr", trigger).Str("fol", follow)
-                .Bool("tamed", tamed).Num("own", owner).Pos(pos).Str("rh", right).Str("lh", left));
+                .Bool("tamed", tamed).Num("own", owner).Pos(pos).Str("rh", right).Str("lh", left), fact: tamed && follow != null);
 
         internal static void Hit(float t, string uid, string who, bool tamed, long owner, string from, string attacker, string attackerWho,
             List<(string Type, float Value)> damage, string hitType, string statusEffect, string skill, float skillLevel, int itemLevel,
@@ -143,34 +148,34 @@ namespace ValheimGamestats
                 sb.Append(i > 0 ? "," : "").Append(Quote(damage[i].Type)).Append(':')
                     .Append(((double)damage[i].Value).ToString("R", CultureInfo.InvariantCulture));
             Write(sb.Append('}').Str("ht", hitType).Str("se", statusEffect).Str("sk", skill).Num("sl", skillLevel).Num("il", itemLevel)
-                .Num("bs", backstab).Pos(point));
+                .Num("bs", backstab).Pos(point), fact: who == null || !who.StartsWith("player:"));
         }
 
         internal static void KillNote(float t, string from, string to, string kind, int boss, int attackers, long fromId = 0) =>
             Write(new StringBuilder("{\"k\":\"killnote\"").Num("t", t).Str("from", from).Str("to", to).Str("kind", kind).Num("boss", boss)
-                .Num("n", attackers).Num("fromid", fromId));
+                .Num("n", attackers).Num("fromid", fromId), fact: true);
 
         internal static void Rise(float t, string uid, string who, bool tamed, float before, float after) =>
             Write(new StringBuilder("{\"k\":\"rise\"").Num("t", t).Str("u", uid).Str("m", who).Bool("tamed", tamed).Num("b", before)
-                .Num("a", after));
+                .Num("a", after), fact: false);
 
         internal static void PetHealth(float t, string uid, string who, string follow, float before, float after) =>
             Write(new StringBuilder("{\"k\":\"pethp\"").Num("t", t).Str("u", uid).Str("m", who).Str("fol", follow).Num("b", before)
-                .Num("a", after));
+                .Num("a", after), fact: false);
 
         internal static void Owner(float t, string uid, string who, long was, long now) =>
-            Write(new StringBuilder("{\"k\":\"owner\"").Num("t", t).Str("u", uid).Str("m", who).Num("was", was).Num("now", now));
+            Write(new StringBuilder("{\"k\":\"owner\"").Num("t", t).Str("u", uid).Str("m", who).Num("was", was).Num("now", now), fact: false);
 
-        internal static void Drop(float t, string uid, string item, int stack, long owner, Vec pos) =>
-            Write(new StringBuilder("{\"k\":\"drop\"").Num("t", t).Str("u", uid).Str("i", item).Num("n", stack).Num("own", owner).Pos(pos));
+        internal static void Drop(float t, string uid, string item, int stack, long owner, Vec pos, bool loot = false) =>
+            Write(new StringBuilder("{\"k\":\"drop\"").Num("t", t).Str("u", uid).Str("i", item).Num("n", stack).Num("own", owner).Pos(pos), fact: loot);
 
         internal static void Ragdoll(float t, string uid, string creature, int level, Vec pos, string ragdoll = null) =>
             Write(new StringBuilder("{\"k\":\"ragdoll\"").Num("t", t).Str("u", uid).Str("c", creature).Num("lv", level).Pos(pos)
-                .Str("r", ragdoll));
+                .Str("r", ragdoll), fact: true);
 
         internal static void Tick(float t, List<PlayerState> players)
         {
-            Write(new StringBuilder("{\"k\":\"tick\"").Num("t", t).Players("ps", players));
+            Write(new StringBuilder("{\"k\":\"tick\"").Num("t", t).Players("ps", players), fact: false);
             try
             {
                 _out?.Flush(); // once a second: a crash loses at most that
@@ -181,11 +186,16 @@ namespace ValheimGamestats
         }
 
         internal static void Out(string e, string p, string i, double n) =>
-            Write(new StringBuilder("{\"k\":\"out\"").Str("e", e).Str("p", p).Str("i", i).Num("n", n));
+            Write(new StringBuilder("{\"k\":\"out\"").Str("e", e).Str("p", p).Str("i", i).Num("n", n), fact: false);
 
-        private static void Write(StringBuilder line)
+        // One line, to the trace file (when Trace is on, unless trace: false) and, if it's a combat fact the collector's rules
+        // need (fact: true), to the event store as {"e":"cf","k":…} (Fact; none in tests/plugin unless set).
+        private static void Write(StringBuilder line, bool fact, bool trace = true)
         {
-            if (!Enabled || _dir == null)
+            var json = line.Append('}').ToString();
+            if (fact && Fact != null)
+                Fact("{\"e\":\"cf\"," + json.Substring(1));
+            if (!trace || !Enabled || _dir == null)
                 return;
             try
             {
@@ -197,7 +207,7 @@ namespace ValheimGamestats
                     _out = new StreamWriter(Path.Combine(_dir, day + ".jsonl"), true, new UTF8Encoding(false));
                     _day = day;
                 }
-                _out.Write(line.Append('}').Append('\n').ToString());
+                _out.Write(json + "\n");
             }
             catch (Exception e)
             {
