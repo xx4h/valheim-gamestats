@@ -170,9 +170,10 @@
   },
   "cf": {
    "from": "CombatTrace.cs",
-   "becomes": "nothing",
-   "page": "Not yet: the plugin's combat facts (field k: meta0 / meta parts, attack, player, health, trig, hit, killnote, destroy, ragdoll, drop — the trace's shapes), stored for the collector's combat rules to come; nothing is summed from them",
+   "becomes": "combat",
+   "page": "Every combat stat, in plugin runs with facts: the collector's own rules (combat.py) make the results from them (field k: meta0 / meta parts, attack, player, health, trig, hit, killnote, destroy, ragdoll, drop — the trace's shapes)",
    "tests": [
+    "test_combat.Recompute.test_results_from_facts_replace_the_plugins_in_that_run_only",
     "test_events.FromTheStore.test_bookkeeping_is_not_gathered"
    ]
   },

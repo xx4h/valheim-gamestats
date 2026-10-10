@@ -74,12 +74,17 @@ once a minute. Per server:
 3. **RCON** (`rcon.py`): players online and their positions (only those who share their position on the map), gear,
    tombstones, portals, the world clock and global keys (boss kills show within a minute).
 4. **Steam** (`steam.py`, optional): achievements and stats of the players' accounts.
-5. **Rebuild**: all events, oldest first, into sessions, deaths, raids, zones, gathering per hour, boss fights
+5. **Combat** (`combat.py`): in every plugin run that stored combat facts (events `cf`), the combat results — damage
+   dealt and taken, kills, health paid, unaccounted kills and damage, summons — come from the collector's own rules
+   (a port of the plugin's `CombatCore.cs`, pinned to the same expected sums on recorded fights in `tests/combat/`),
+   replacing what the plugin sent for that run. A rule change (`combat.RULES`) recomputes every run with facts;
+   runs whose facts didn't change come from `<server>/combat.json`. Older runs, without facts, keep the plugin's results.
+6. **Rebuild**: all events, oldest first, into sessions, deaths, raids, zones, gathering per hour, boss fights
    (`fights.py`), pets (`pets.py`), peaks, feats, dungeon visits, gear moves — plus the world, RCON and Steam parts —
    into one JSON document, called `data.json` throughout (never written as one file since 1.20.4).
-6. **Pieces** (`chunks.py`): that document in files for the page (section 3).
-7. **Discord feed** (`notify.py`, optional): bosses, raids, medals, titles, the weekly recap.
-8. **Health** (`health.py`): checks for what should be there and isn't, and posts to an admins' Discord webhook
+7. **Pieces** (`chunks.py`): that document in files for the page (section 3).
+8. **Discord feed** (`notify.py`, optional): bosses, raids, medals, titles, the weekly recap.
+9. **Health** (`health.py`): checks for what should be there and isn't, and posts to an admins' Discord webhook
    (section 4).
 
 **Files under the data directory** (`/data` in the containers):
@@ -90,6 +95,7 @@ once a minute. Per server:
 <server>/positions.json       RCON: who's online, where       <server>/pets.json         every pet across saves
 <server>/equipment.json       RCON: gear + gear history       <server>/accounts.json     Steam id → characters (private)
 <server>/tombstones.json      RCON: tombstones seen           <server>/steam.json        achievements (private)
+<server>/combat.json          combat results per plugin run (a cache of combat.py's)
 <server>/notify.json          what was announced              <server>/health.json       alert state
 site/<server>/index.json, c/  what the page loads             site/<server>/terrain.png, explored.png  map layers
 icons/valheim/                item icons + game data, extracted by hand (tools/README.md)

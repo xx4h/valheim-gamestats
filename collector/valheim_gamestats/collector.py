@@ -50,7 +50,7 @@ import time
 from collections import Counter, defaultdict
 from datetime import datetime
 
-from . import chunks, events, fights, health, mapimg, notify, pets, rcon, scoring, sources, steam, valheim_world
+from . import chunks, combat, events, fights, health, mapimg, notify, pets, rcon, scoring, sources, steam, valheim_world
 
 CONFIG = os.environ.get("CONFIG", "/config/config.json")
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
@@ -69,7 +69,7 @@ def log(msg):
 
 class Valheim:
     # events that are bookkeeping, not something a player gathered: never summed into "gather"
-    # cf: the plugin's combat facts, for the collector's own combat rules (to come)
+    # cf: the plugin's combat facts — combat.py makes the results from them (before this), nothing is summed from them
     QUIET = {"plugin", "petdeath", "pethp", "warn", "login", "raidend", "lobby", "gone", "cf"}
     BOOT = {"plugin", "start"}  # a new boot: not a sign the old one was still up
     SAMPLE_EVERY = 600  # the server samples every minute; keep one per 10 min (and every change in players online)
@@ -484,6 +484,11 @@ def run_once(cfg):
             log(f"[{server['id']}] events failed: {type(e).__name__}: {e}")
             alert(server, cfg, sdir, {"collector:events": f"no events from the plugin's store: {e}"}, partial=True)
             continue
+        try:  # the combat results from the plugin's facts, where it stored them (combat.py)
+            evs = combat.recompute(evs, os.path.join(sdir, "combat.json"))
+        except Exception as e:  # never at the stats' expense: the plugin's own results stay
+            log(f"[{server['id']}] combat failed: {type(e).__name__}: {e}")
+            failed["combat"] = f"{type(e).__name__}: {e}"
         if server.get("world"):
             try:
                 world_update(server, cfg, sdir)

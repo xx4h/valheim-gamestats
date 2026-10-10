@@ -226,6 +226,153 @@ static class Replay
         return right == null ? left : left == null ? right : right + "+" + left;
     }
 
+    // The combat facts of one plugin run (events "cf", as the store has them — tests/combat/*.jsonl.gz) through a fresh
+    // CombatCore, exactly as the collector feeds them to combat.py (Feeder): the meta from its parts, a tick before each
+    // fact, a summon's player from its attack triggers seen so far, a last tick at the end. (event, player, object) → sum:
+    // what tests/combat/*.expected.json pins for both.
+    internal static Dictionary<(string, string, string), double> Facts(IEnumerable<string> lines)
+    {
+        var sums = new Dictionary<(string, string, string), double>();
+        var core = new CombatCore((e, p, i, n) =>
+        {
+            var key = (e, p ?? "", i);
+            sums.TryGetValue(key, out var have);
+            sums[key] = have + n;
+        });
+        CombatMeta meta = null;
+        var follows = new Dictionary<string, string>();
+        var holding = new Dictionary<string, string>();
+        var last = 0f;
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+            var j = JsonDocument.Parse(line).RootElement;
+            var k = S(j, "k");
+            if (k == "meta0")
+            {
+                meta = new CombatMeta();
+                continue;
+            }
+            if (k == "meta")
+            {
+                MetaPart(meta ??= new CombatMeta(), j);
+                continue;
+            }
+            if (meta != null)
+            {
+                core.Meta(meta);
+                meta = null;
+            }
+            var t = F(j, "t");
+            last = t;
+            core.Tick(t, null);
+            switch (k)
+            {
+                case "attack":
+                    core.Attack(t, S(j, "p"), S(j, "w"), Has(j, "an") ? S(j, "an") : null);
+                    break;
+                case "player":
+                    core.PlayerHealth(S(j, "p"), F(j, "b"), F(j, "a"), F(j, "mb"), F(j, "ma"), t);
+                    break;
+                case "health":
+                    core.CreatureHealth(t, S(j, "u"), S(j, "m"), Pos(j), F(j, "b"), F(j, "a"), Players(j, "l"),
+                        Has(j, "own") ? j.GetProperty("own").GetInt64() : 0);
+                    break;
+                case "trig":
+                    if (Has(j, "tamed") && j.GetProperty("tamed").GetBoolean() && S(j, "fol") != null)
+                    {
+                        follows[S(j, "u")] = S(j, "fol");
+                        if (Variant(j) is string v)
+                            holding[S(j, "u")] = v;
+                        core.Summon(t, S(j, "u"), Prefab(S(j, "m")), S(j, "tr"), S(j, "fol"), Pos(j),
+                            Has(j, "own") ? j.GetProperty("own").GetInt64() : 0, Variant(j));
+                    }
+                    break;
+                case "hit":
+                {
+                    var d = j.GetProperty("d").EnumerateObject().ToList();
+                    var later = (float)d.Where(x => x.Name is "fire" or "spirit" or "poison").Sum(x => x.Value.GetDouble());
+                    var direct = (float)d.Sum(x => x.Value.GetDouble()) - later;
+                    var am = S(j, "am") ?? "";
+                    if (am.StartsWith("player:"))
+                        core.Hit(t, S(j, "u"), am.Substring(7), direct, later);
+                    else if (S(j, "att") is string att && follows.TryGetValue(att, out var fol))
+                        core.SummonHit(t, S(j, "u"), fol, Prefab(am), direct, later, holding.GetValueOrDefault(att));
+                    break;
+                }
+                case "killnote":
+                    core.KillNote(t, Has(j, "fromid") ? j.GetProperty("fromid").GetInt64() : 0, S(j, "to"), S(j, "kind"));
+                    break;
+                case "destroy":
+                    core.Destroyed(t, S(j, "u"), S(j, "m"), j.GetProperty("tamed").GetBoolean(), Pos(j), N(j, "h"), N(j, "mh"),
+                        Players(j, "l"), Players(j, "ps"), by: Has(j, "own") ? j.GetProperty("own").GetInt64() : 0);
+                    break;
+                case "ragdoll":
+                    core.Ragdoll(t, S(j, "u"), S(j, "c"), (int)F(j, "lv"), Pos(j), Has(j, "r") ? S(j, "r") : null);
+                    break;
+                case "drop":
+                    core.Loot(t, S(j, "u"), S(j, "i"), long.Parse(S(j, "u").Split(':')[0]), Pos(j));
+                    break;
+            }
+        }
+        core.Tick(last + 2 * CombatCore.MatchSeconds + 2 * CombatCore.SettleSeconds, new List<PlayerState>());
+        return sums;
+    }
+
+    internal static Dictionary<(string, string, string), double> Facts(string file)
+    {
+        using var gz = new System.IO.Compression.GZipStream(File.OpenRead(file), System.IO.Compression.CompressionMode.Decompress);
+        using var reader = new StreamReader(gz);
+        var lines = new List<string>();
+        while (reader.ReadLine() is string l)
+            lines.Add(l);
+        return Facts(lines);
+    }
+
+    private static void MetaPart(CombatMeta meta, JsonElement j)
+    {
+        var d = j.GetProperty("d");
+        switch (S(j, "s"))
+        {
+            case "noragdoll":
+                foreach (var x in d.EnumerateArray()) meta.NoRagdoll.Add(x.GetString());
+                break;
+            case "ragdolls":
+                foreach (var x in d.EnumerateObject()) meta.Ragdolls[x.Name] = x.Value.EnumerateArray().Select(c => c.GetString()).ToList();
+                break;
+            case "cost":
+                foreach (var x in d.EnumerateObject()) meta.Costs[x.Name] = (F(x.Value, "f"), F(x.Value, "p"));
+                break;
+            case "drops":
+                foreach (var x in d.EnumerateObject()) meta.Drops[x.Name] = x.Value.EnumerateObject().ToDictionary(i => i.Name, i => (float)i.Value.GetDouble());
+                break;
+            case "timed":
+                foreach (var x in d.EnumerateArray()) meta.Timed.Add(x.GetString());
+                break;
+            case "reach":
+                foreach (var x in d.EnumerateObject()) meta.Reach[x.Name] = (float)x.Value.GetDouble();
+                break;
+            case "names":
+                foreach (var x in d.EnumerateObject()) meta.Names[x.Name] = x.Value.GetString();
+                break;
+            case "dots":
+                foreach (var x in d.EnumerateObject()) meta.Dots[x.Name] = (float)x.Value.GetDouble();
+                break;
+            case "weapons":
+                foreach (var x in d.EnumerateObject())
+                    meta.Weapons[x.Name] = (x.Value.GetProperty("ranged").GetBoolean(), F(x.Value, "reach"), x.Value.GetProperty("harmful").GetBoolean());
+                break;
+        }
+    }
+
+    // The sums as tests/combat/*.expected.json has them: {"event|player|object": n}, rounded to 4 places.
+    internal static string Expected(Dictionary<(string, string, string), double> sums) =>
+        "{\n" + string.Join(",\n", sums.OrderBy(kv => kv.Key.Item1, System.StringComparer.Ordinal).ThenBy(kv => kv.Key.Item2, System.StringComparer.Ordinal)
+            .ThenBy(kv => kv.Key.Item3, System.StringComparer.Ordinal)
+            .Select(kv => " " + JsonSerializer.Serialize(kv.Key.Item1 + "|" + kv.Key.Item2 + "|" + kv.Key.Item3) + ": "
+                          + System.Math.Round(kv.Value, 4).ToString(System.Globalization.CultureInfo.InvariantCulture))) + "\n}\n";
+
     private static bool Has(JsonElement j, string k) => j.TryGetProperty(k, out var v) && v.ValueKind != JsonValueKind.Null;
 
     // "Skeleton_Friendly*1" / "player:Ragnar" → the prefab

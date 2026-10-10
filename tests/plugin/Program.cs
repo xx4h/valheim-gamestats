@@ -18,6 +18,12 @@ static class Program
         if (!ok) failed++;
     }
 
+    // a count (kills, hits) exactly; an amount to within float noise (C# computes in float, combat.py in double)
+    internal static bool Same(string key, double a, double b) =>
+        key.Split('|')[0] is "kill" or "wkill" or "kw" or "skw" or "ukill" or "hit"
+            ? Math.Abs(a - b) < 1e-9
+            : Math.Abs(a - b) <= 0.05 + 1e-3 * Math.Max(Math.Abs(a), Math.Abs(b));
+
     static string Dir() => Directory.CreateTempSubdirectory("events").FullName;
 
     static EventStore Open(string dir, int recentMax = 20000, int maxReply = 3800, int keepDays = 90) =>
@@ -150,6 +156,28 @@ static class Program
                     Check(problem == null, problem ?? "every hook fits the game's methods and fields");
         }
         CombatTests.Run(Check);
+        {
+            // the recorded fights in tests/combat: these rules and the collector's (combat.py) both give their expected sums
+            var dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../combat"));
+            foreach (var fixture in Directory.GetFiles(dir, "*.jsonl.gz").OrderBy(f => f))
+            {
+                var expected = fixture.Replace(".jsonl.gz", ".expected.json");
+                var sums = Replay.Facts(fixture);
+                if (args.Length >= 1 && args[0] == "expect")
+                {
+                    File.WriteAllText(expected, Replay.Expected(sums));
+                    Console.WriteLine($"      wrote {Path.GetFileName(expected)} ({sums.Count} sums)");
+                    continue;
+                }
+                var want = System.Text.Json.JsonDocument.Parse(File.ReadAllText(expected)).RootElement.EnumerateObject()
+                    .ToDictionary(x => x.Name, x => x.Value.GetDouble());
+                var got = sums.ToDictionary(kv => kv.Key.Item1 + "|" + kv.Key.Item2 + "|" + kv.Key.Item3, kv => kv.Value);
+                var off = want.Keys.Union(got.Keys).Where(k => !Same(k, want.GetValueOrDefault(k), got.GetValueOrDefault(k))).ToList();
+                foreach (var k in off.Take(10))
+                    Console.WriteLine($"  {k}: expected {want.GetValueOrDefault(k):0.####}, got {got.GetValueOrDefault(k):0.####}");
+                Check(off.Count == 0, $"combat facts {Path.GetFileName(fixture)}: the expected sums ({want.Count})");
+            }
+        }
         if (args.Length == 2 && args[0] == "replay")
         {
             // dotnet run -- replay <trace.jsonl>: a real session through today's CombatCore, against what the plugin made of it
