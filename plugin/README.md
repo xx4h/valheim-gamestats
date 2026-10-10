@@ -20,7 +20,10 @@ last number it has (RCON `gs_events <after>`: a header line
 `{"id":…,"head":…,"oldest":…}`, then as many events as fit in ValheimRcon's
 ~4 KB reply) and asks again until none come. A gap in the numbers is exactly
 what's missing; a new `id` means a new store (numbers start over). 90 days of
-files are kept (about 300 KB a day). A line torn by a crash is skipped.
+files are kept (about 300 KB a day). A line torn by a crash is skipped. An event
+that couldn't fit into one reply is refused and gets no number — a reply could
+never carry it, and the collector would ask for it forever; a `warn` event
+(`events`, "too big: …") takes its place for the collector's alert.
 `tests/plugin` runs the store outside the game.
 
 Since 1.17.0 the store also has everything the collector used to read from

@@ -123,6 +123,22 @@ static class Program
             Check(s.Append(Ev(4)) == 2, "writable again: the next number follows the last written one");
         }
         {
+            // an event no reply could hold: refused with a warning, never numbered — the stream doesn't stop at it
+            var dir = Dir();
+            var s = Open(dir, maxReply: 400);
+            warnings.Clear();
+            s.Append(Ev(1));
+            var big = "{\"e\":\"meta\",\"p\":\"\",\"i\":\"" + new string('x', 500) + "\",\"n\":1}";
+            Check(s.Append(big) == 0 && warnings.Count == 1 && warnings[0].StartsWith("events: too big: {\"e\":\"meta\""),
+                "too big for a reply: not stored, one warning naming it");
+            s.Append(Ev(2));
+            var (_, lines) = ReadAll(s, 0);
+            Check(lines.Count == 3 && Consecutive(lines, 1) && lines.All(Json), "too big for a reply: the stream goes on, no gap, no stop");
+            Check(lines[1].Contains("\"e\":\"warn\"") && lines[1].Contains("\"i\":\"events\"") && lines[1].Contains("too big: {\\\"e\\\":\\\"meta\\\""),
+                "too big for a reply: a warn event for the collector (alert error:events), naming it");
+            s.Close();
+        }
+        {
             // the hooks against the game: needs the built plugin and plugin/lib (skipped without, CI always has both)
             var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
             var plugin = Path.Combine(root, "plugin/bin/Release/net48/ValheimGamestats.dll");

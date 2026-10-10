@@ -64,6 +64,19 @@ namespace ValheimGamestats
                 var now = _now();
                 var line = new StringBuilder("{\"s\":").Append(_seq + 1).Append(",\"t\":").Append(now.ToUnixTimeMilliseconds()).Append(',')
                     .Append(body, 1, body.Length - 1).ToString();
+                if (line.Length + 1 + ReplyHead > _maxReply)
+                {
+                    // a reply never holds it (After stops before it), so the collector would ask for it forever: refused,
+                    // its number stays free — the stream goes on
+                    var what = $"{body.Substring(0, Math.Min(40, body.Length))}… ({line.Length} bytes) not stored";
+                    Warn("too big", what);
+                    // and for the collector (the store works, only this event can't go): its alert error:events
+                    var sb = new StringBuilder("{\"e\":\"warn\",\"p\":\"\",\"i\":\"events\",\"n\":1,\"msg\":\"too big: ");
+                    foreach (var c in what)
+                        sb.Append(c == '"' || c == '\\' ? "\\" + c : c < ' ' ? " " : c.ToString());
+                    Append(sb.Append("\"}").ToString());
+                    return 0;
+                }
                 try
                 {
                     var day = now.UtcDateTime.ToString("yyyy-MM-dd");
@@ -223,13 +236,18 @@ namespace ValheimGamestats
             return n;
         }
 
-        private void Warn(string what, Exception e)
+        private void Warn(string what, Exception e) => Warn(what, e.Message);
+
+        private void Warn(string what, string msg)
         {
             var now = _now();
             if (now - _warned < TimeSpan.FromMinutes(1))
                 return;  // a full disk shouldn't flood the log either: once a minute
             _warned = now;
-            _warn("events: " + what + ": " + e.Message);
+            _warn("events: " + what + ": " + msg);
         }
+
+        // the reply's first line ({"id":"<32 hex>","head":…,"oldest":…}) at its longest, and its line break
+        private const int ReplyHead = 96;
     }
 }
