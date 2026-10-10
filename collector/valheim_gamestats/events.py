@@ -56,10 +56,17 @@ def set_meta(db, k, v):
     db.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)", (k, json.dumps(v)))
 
 
-def load(db, since=None):
-    """Every event, oldest first."""
-    rows = db.execute("SELECT t, body FROM events" + (" WHERE t >= ?" if since else "") + " ORDER BY t, src, seq",
-                      (since,) if since else ())
+def load(db, since=None, skip=()):
+    """Every event, oldest first; skip: kinds ("e") left in the store (combat facts: combat.Facts reads them per run)."""
+    where, args = [], []
+    if since:
+        where.append("t >= ?")
+        args.append(since)
+    if skip:
+        where.append(f"e NOT IN ({', '.join('?' for _ in skip)})")
+        args.extend(skip)
+    rows = db.execute("SELECT t, body FROM events" + (" WHERE " + " AND ".join(where) if where else "")
+                      + " ORDER BY t, src, seq", args)
     out = []
     for t, body in rows:
         ev = json.loads(body)

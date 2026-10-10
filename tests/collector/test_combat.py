@@ -142,6 +142,25 @@ class Recompute(unittest.TestCase):
             combat._run = real
         self.assertEqual(calls, [1])
 
+    def test_from_the_store_like_from_the_events(self):
+        from valheim_gamestats import events
+        db = events.open_db(self.dir)
+        for k, ev in enumerate(self.evs):
+            events.add(db, "store", k, ev)
+        db.commit()
+        rest = events.load(db, skip=("cf",))
+        db.close()
+        self.assertFalse(any(ev["e"] == "cf" for ev in rest))
+        self.assertEqual(len(rest), len([ev for ev in self.evs if ev["e"] != "cf"]))
+        want = [ev for ev in combat.recompute(self.evs, None) if ev["e"] != "cf"]
+        self.assertEqual(combat.recompute(rest, self.cache, combat.Facts(self.dir)), want)
+        real = combat._run
+        try:  # the facts again: from the cache, by their count and last time alone
+            combat._run = lambda facts: (_ for _ in ()).throw(AssertionError("recomputed"))
+            self.assertEqual(combat.recompute(rest, self.cache, combat.Facts(self.dir)), want)
+        finally:
+            combat._run = real
+
     def test_no_facts_no_change(self):
         evs = [ev for ev in self.evs if ev["e"] != "cf"]
         self.assertEqual(combat.recompute(evs, self.cache), evs)

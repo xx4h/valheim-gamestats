@@ -13,6 +13,7 @@ Stdlib only.
 import json
 import math
 import os
+import sqlite3
 
 RULES = 1  # bump with any rule change: cached results of finished runs are recomputed
 
@@ -736,43 +737,89 @@ class Feeder:
 
 # ---- the collector: results from facts, where there are facts ----------------------------------------------------------
 
-def recompute(evs, cache_path=None):
+class Facts:
+    """The combat facts where the collector keeps them (<server>/events.db), per plugin run: how many and the last one's
+    time, and the facts themselves one by one when a run is computed — never all of them in memory (a busy day stores
+    some 20,000, about 1 KB each as Python objects)."""
+
+    def __init__(self, sdir):
+        self.path = os.path.join(sdir, "events.db")
+        self.db = None
+
+    def _db(self):
+        if self.db is None:
+            self.db = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+            self.db.execute("PRAGMA temp_store = MEMORY")  # the container's root is read-only
+        return self.db
+
+    def sig(self, start, end):
+        n, last = self._db().execute("SELECT count(*), max(t) FROM events WHERE e = 'cf' AND t >= ? AND t < ?",
+                                     (start, end)).fetchone()
+        return [n, last] if n else None
+
+    def facts(self, start, end):
+        rows = self._db().execute("SELECT t, body FROM events WHERE e = 'cf' AND t >= ? AND t < ? ORDER BY t, src, seq",
+                                  (start, end))
+        for t, body in rows:
+            ev = json.loads(body)
+            ev["t"] = t
+            yield ev
+
+    def close(self):
+        if self.db is not None:
+            self.db.close()
+            self.db = None
+
+
+class Listed:
+    """The combat facts among the events themselves (events "cf" in evs, oldest first) — tests, tools."""
+
+    def __init__(self, evs):
+        self.cf = [ev for ev in evs if ev.get("e") == "cf"]
+
+    def facts(self, start, end):
+        return [ev for ev in self.cf if start <= ev["t"] < end]
+
+    def sig(self, start, end):
+        got = self.facts(start, end)
+        return [len(got), got[-1]["t"]] if got else None
+
+    def close(self):
+        pass
+
+
+def recompute(evs, cache_path=None, facts=None):
     """The events with the combat results recomputed: in every plugin run (from one "plugin" start event to the next) that
     stored combat facts, every result event (RESULTS — the plugin's and any added by hand) is replaced by what these
     rules make of the facts, per minute and rounded as the plugin flushes them. Runs without facts stay as they are.
-    Each run's results are cached (cache_path, keyed by RULES and its facts): a run is computed again only when its facts
-    changed (the running one, as new facts come) or the rules did."""
-    starts = [ev["t"] for ev in evs if ev.get("e") == "plugin"]
-    runs = []  # (start, end, facts)
-    for k, start in enumerate(starts):
-        end = starts[k + 1] if k + 1 < len(starts) else float("inf")
-        runs.append([start, end, []])
-    if not runs:
-        return evs
-    r = 0
-    for ev in evs:
-        if ev.get("e") != "cf":
-            continue
-        while r + 1 < len(runs) and ev["t"] >= runs[r + 1][0]:
-            r += 1
-        if runs[r][0] <= ev["t"] < runs[r][1]:
-            runs[r][2].append(ev)
-    runs = [x for x in runs if x[2]]
-    if not runs:
-        return evs
-    cache = _load(cache_path)
-    keep = {}
-    results = []
-    for start, _end, facts in runs:
-        key = f"{start:.3f}"
-        sig = [len(facts), facts[-1]["t"]]
-        hit = cache.get(key)
-        if hit is not None and hit.get("sig") == sig:
-            got = hit["results"]
-        else:
-            got = _run(facts)
-        keep[key] = {"sig": sig, "results": got}
-        results.extend({"t": t, "e": e, "p": p, "i": i, "n": n} for t, e, p, i, n in got)
+    facts: where the facts are (Facts: the store; by default Listed: among evs). Each run's results are cached
+    (cache_path, keyed by RULES and its facts' count and last time): a run is computed again only when its facts changed
+    (the running one, as new facts come) or the rules did."""
+    facts = facts if facts is not None else Listed(evs)
+    try:
+        starts = [ev["t"] for ev in evs if ev.get("e") == "plugin"]
+        runs = []  # (start, end, sig)
+        for k, start in enumerate(starts):
+            end = starts[k + 1] if k + 1 < len(starts) else float("inf")
+            sig = facts.sig(start, end)
+            if sig:
+                runs.append((start, end, sig))
+        if not runs:
+            return evs
+        cache = _load(cache_path)
+        keep = {}
+        results = []
+        for start, end, sig in runs:
+            key = f"{start:.3f}"
+            hit = cache.get(key)
+            if hit is not None and hit.get("sig") == sig:
+                got = hit["results"]
+            else:
+                got = _run(facts.facts(start, end))
+            keep[key] = {"sig": sig, "results": got}
+            results.extend({"t": t, "e": e, "p": p, "i": i, "n": n} for t, e, p, i, n in got)
+    finally:
+        facts.close()
     if cache_path is not None and keep != cache:
         _save(cache_path, keep)
     windows = [(start, end) for start, end, _ in runs]
@@ -787,7 +834,8 @@ def recompute(evs, cache_path=None):
 
 
 def _run(facts):
-    """One run's facts → its results per minute: [[t, e, p, i, n]], n rounded (the plugin's Gather.Flush)."""
+    """One run's facts (oldest first, any iterable) → its results per minute: [[t, e, p, i, n]], n rounded (the plugin's
+    Gather.Flush)."""
     sums = {}
 
     def out(t, e, p, i, n):
@@ -796,10 +844,12 @@ def _run(facts):
         key = (int(t // 60), e, p, i)
         sums[key] = sums.get(key, 0) + n
     feeder = Feeder(out)
-    last = facts[0]["t"]
+    last = None
     for ev in facts:
         last = ev["t"]
         feeder.feed(last, ev)
+    if last is None:
+        return []
     feeder.end(last)
     res = []
     for (minute, e, p, i), n in sums.items():
