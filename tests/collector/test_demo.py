@@ -55,6 +55,18 @@ class Demo(unittest.TestCase):
         self.assertGreater(len(d["world_history"]), 1)
         self.assertEqual(d["scoring"]["changed"], {})
 
+    def test_gear(self):
+        # the equipment card and the gear history: every player's last seen gear and look, who wears it now
+        eq = self.data["equipment"]
+        self.assertEqual(sorted(eq), sorted(p["p"] for p in self.gen.PLAYERS))
+        self.assertEqual(sorted(p for p, e in eq.items() if e["online"]), ["Astrid", "Bjorn"])
+        for p, e in eq.items():
+            self.assertTrue({"helmet", "chest", "legs"} <= set(e["slots"]), p)
+            self.assertTrue({"right", "rightBack"} & set(e["slots"]), p)
+            self.assertEqual(set(e["look"]), {"m", "skin", "hair", "h", "b"})
+            self.assertLessEqual(e["t"], END)
+        self.assertTrue(any(len(e["usage"]["helmet"]) > 1 for e in eq.values()))  # gear follows the stages
+
     def test_exploring_together_credits_only_who_was_there(self):
         # the demo keeps the rules it shows off: a zone is credited to players online at the time
         spans = [(s["p"], s["s"], s["e"] or END) for s in self.data["sessions"]]

@@ -128,6 +128,32 @@ SIGNS = ["Welcome to Ironhold", "Mead hall — no trolls", "Ragnar's hut (keep o
          "Here lies Leif's dignity", "Fish market", "Lox pen", "Do not open: angry bees"]
 TAMES = [("Wolf", "Fenrir"), ("Wolf", "Skoll"), ("Boar", "Bacon"), ("Lox", "Bessie"), ("Lox", "Thunderhoof"), ("Wolf", None),
          ("Boar", None), ("Asksvin", "Ember")]
+# What they wear, stage by stage (the hands: the stage's weapons, a shield on the left). A slot left out keeps what it had.
+GEAR = [
+    {"helmet": "HelmetLeather", "chest": "ArmorLeatherChest", "legs": "ArmorLeatherLegs", "shoulder": "CapeDeerHide",
+     "left": "ShieldWood"},
+    {"helmet": "HelmetBronze", "chest": "ArmorBronzeChest", "legs": "ArmorBronzeLegs", "shoulder": "CapeTrollHide",
+     "left": "ShieldBronzeBuckler", "trinket": "TrinketBronzeHealth"},
+    {"helmet": "HelmetIron", "chest": "ArmorIronChest", "legs": "ArmorIronLegs", "left": "ShieldBanded",
+     "trinket": "TrinketIronHealth"},
+    {"helmet": "HelmetDrake", "chest": "ArmorWolfChest", "legs": "ArmorWolfLegs", "shoulder": "CapeWolf", "left": "ShieldSilver",
+     "trinket": "TrinketIronStamina"},
+    {"helmet": "HelmetPadded", "chest": "ArmorPaddedCuirass", "legs": "ArmorPaddedGreaves", "shoulder": "CapeLinen",
+     "left": "ShieldBlackmetal", "utility": "BeltStrength"},
+    {"helmet": "HelmetCarapace", "chest": "ArmorCarapaceChest", "legs": "ArmorCarapaceLegs", "shoulder": "CapeFeather",
+     "left": "ShieldCarapace", "utility": "Demister"},
+    {"helmet": "HelmetFlametal", "chest": "ArmorFlametalChest", "legs": "ArmorFlametalLegs", "shoulder": "CapeAsh",
+     "left": "ShieldFlametal"},
+]
+SYNCED = ("right", "left", "rightBack", "leftBack", "shoulder")  # the slots whose level the game shares (rcon.py)
+# How they look (plugin "look": body model 0 male / 1 female, skin and hair tint, hair and beard item)
+LOOKS = {"Ragnar": (0, 0.3, (1, 0.931, 0.706), "Hair6", "Beard1"),
+         "Astrid": (1, 0.65, (0.55, 0.39, 0.271), "Hair19", "BeardNone"),
+         "Bjorn": (0, 0.373, (0.36, 0.22, 0.12), "Hair18", "Beard18"),
+         "Sigrid": (1, 0.759, (0.598, 0.297, 0.172), "Hair30", "BeardNone"),
+         "Leif": (0, 0.487, (0.743, 0.691, 0.524), "Hair38", "Beard24"),
+         "Freydis": (1, 0.55, (0.2, 0.15, 0.12), "Hair12", "BeardNone"),
+         "Ivar": (0, 0.42, (0.85, 0.85, 0.82), "Hair3", "Beard10")}
 
 
 class Sim:
@@ -146,6 +172,9 @@ class Sim:
         self.bases = {p["p"]: self.near(0, 0, 300) for p in PLAYERS}
         self.locations = {}  # name -> (x, z)
         self.zdos = 90_000
+        # gear (equipment.json, the plugin's equipment poll): its own dice, so the rest of the history stays as it was
+        self.gr = random.Random(seed + 1)
+        self.gear, self.seen, self.usage, self.levels = {}, {}, {}, {}  # worn now; last poll; history; item levels
 
     def add(self, t, **e):
         e.setdefault("p", "")
@@ -266,6 +295,7 @@ class Sim:
             self.fight(t, players, boss, st)
         for p in players:
             self.play(t, p, PLAYERS[[x["p"] for x in PLAYERS].index(p)], st, local, players)
+            self.wear(t + BLOCK, p, st)
 
     def play(self, t, p, me, st, local, players):
         r, stage = self.r, STAGES[st]
@@ -364,6 +394,43 @@ class Sim:
             self.add(ts + 30, e="spawn", p=p, uid=self.uids[p])
         elif r.random() < 0.01:
             self.add(at(), e="closecall", p=p, hp=round(r.uniform(0.5, 9), 1), max=round(hp))
+
+    def wear(self, t, p, st):
+        """Ten minutes in their gear: each piece follows the stage a while after it arrives, the hands hold a weapon of
+        the time and a shield (or carry them on the back); the poll adds the time to the gear history like rcon.py."""
+        r = self.gr
+        worn = self.gear.setdefault(p, {})  # slot -> stage of the piece they have
+        for slot in {k for g in GEAR[:st + 1] for k in g}:
+            newest = max(i for i in range(st + 1) if slot in GEAR[i])
+            if slot not in worn or (worn[slot] < newest and r.random() < 0.08):
+                worn[slot] = newest
+        weapons = STAGES[st]["weapons"]
+        w = worn.get("weapon")
+        if w is None or (w not in weapons and r.random() < 0.08) or r.random() < 0.03:  # catching up, or a change
+            worn["weapon"] = r.choice(weapons)
+        back = r.random() < 0.35  # walking about with the hands free
+        gear = {slot: GEAR[i][slot] for slot, i in worn.items() if slot not in ("weapon", "left")}
+        gear["rightBack" if back else "right"] = worn["weapon"]
+        gear["leftBack" if back else "left"] = GEAR[worn["left"]]["left"]
+        slots = {}
+        for slot, it in gear.items():
+            s = {"item": it}
+            if slot in SYNCED:
+                s["q"] = self.levels.setdefault((p, it), r.randint(1, 4))
+            slots[slot] = s
+            u = self.usage.setdefault(p, {}).setdefault(slot, {}).setdefault(it, {"f": t, "l": t, "s": 0})
+            u["l"], u["s"] = t, u["s"] + BLOCK
+            if s.get("q"):
+                u["q"] = max(u.get("q", 0), s["q"])
+        m, skin, hair, h, b = LOOKS[p]
+        self.seen[p] = {"t": t, "slots": slots, "look": {"m": m, "skin": [skin] * 3, "hair": list(hair), "h": h, "b": b}}
+
+    def equipment(self, online):
+        """equipment.json as the collector's poll leaves it (rcon.py): last seen gear, who is on now, the gear history."""
+        last = {p: {**v, "t": min(v["t"], self.end)} for p, v in self.seen.items()}
+        cap = lambda items: {it: {**u, "l": min(u["l"], self.end)} for it, u in items.items()}
+        return {"ok": self.end, "online": sorted(online), "players": dict(sorted(last.items())),
+                "usage": {p: {slot: cap(items) for slot, items in v.items()} for p, v in sorted(self.usage.items())}}
 
     def poisson(self, lam):
         n, p, limit = 0, 1.0, math.exp(-lam)
@@ -570,6 +637,8 @@ def build(out, seed=7, target=350, end=None):
                 collector.world_update(server, CFG, sdir)
             collector.terrain_update(server, sdir)
             clock[0] = end
+            with open(os.path.join(sdir, "equipment.json"), "w") as f:
+                json.dump(sim.equipment(online), f)
             evs = sorted(sim.ev, key=lambda e: e["t"])
             collector.build(server, CFG, sdir, evs)
         if os.path.exists(out):
