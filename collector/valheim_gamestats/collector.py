@@ -177,8 +177,9 @@ class Valheim:
                     for loc in g.get("l") or []:  # 1.17.0+: the location placed in it
                         if loc not in z["l"]:
                             z["l"].append(loc)
-                elif e == "peak":  # highest per minute, not summed: the hour keeps the highest
-                    k = (int(t // 3600 * 3600), g["p"], g["i"])
+                elif e in ("peak", "skill"):  # highest per minute, not summed: the hour keeps the highest
+                    # skill (combat.py): a level in a skill as combat showed it, among the peaks as "skill:<Skill>"
+                    k = (int(t // 3600 * 3600), g["p"], g["i"] if e == "peak" else "skill:" + g["i"])
                     peaks[k] = max(peaks.get(k, float("-inf")), float(g["n"]))
                 elif e in FEATS:
                     a, b = FEATS[e]

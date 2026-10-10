@@ -14,7 +14,7 @@ import json
 import math
 import os
 
-RULES = 2  # bump with any rule change: cached results of finished runs are recomputed
+RULES = 3  # bump with any rule change: cached results of finished runs are recomputed
 
 MATCH_RANGE = 4.0
 ATTACKER_RANGE = 60.0
@@ -44,9 +44,13 @@ SCALE_PER_PLAYER = 0.3
 SCALE_PLAYERS_MAX = 5
 
 # the events these rules produce — in a run with facts they replace what the plugin sent (collector.py)
-RESULTS = {"dmg", "wdmg", "dw", "kill", "wkill", "kw", "taken", "hit", "cost", "ukill", "udmg", "sdw", "skw", "edmg"}
+RESULTS = {"dmg", "wdmg", "dw", "kill", "wkill", "kw", "taken", "hit", "cost", "ukill", "udmg", "sdw", "skw", "edmg",
+           "skill"}
 # ... of which only the collector's rules make these (the plugin's CombatCore.cs never did: no parity to check)
-COLLECTOR_ONLY = {"edmg"}
+COLLECTOR_ONLY = {"edmg", "skill"}
+# ... and these are a level, not an amount: a minute keeps the highest (skill: a player's level in a skill, as seen)
+HIGHEST = {"skill"}
+NO_SKILL = {"", "None", "All"}
 
 
 def scale(near):
@@ -213,6 +217,13 @@ class Core:
         if len(self._notes) < 1000 and to:
             self._notes.append((t, sender, to, kind))
 
+    def skill(self, t, player, skill, level):
+        """A player's level in a skill, as a hit of theirs or a cost they paid shows it (0: the hit didn't carry it —
+        an arrow's, a bolt's)."""
+        self.now = t
+        if player and skill not in NO_SKILL and level and level > 0:
+            self._add("skill", player, skill, level)
+
     def hit(self, t, uid, player, damage, dot=0.0):
         self.now = t
         if not player or damage + dot <= 0:
@@ -261,6 +272,9 @@ class Core:
                     pending.pop(0)
                     if not capped and full > 0:
                         self._cost_factor[player] = min(1.0, lost / full)
+                        # the cost's reduction is the blood magic skill: 1 - 0.33 * level / 100
+                        level = (1.0 - self._cost_factor[player]) / (1.0 - COST_SKILL_MIN) * 100.0
+                        self.skill(t, player, "BloodMagic", min(100.0, max(0.0, level)))
                     self._add("cost", player, c[1], lost)
                     return 0.0
                 if lost > full + margin:
@@ -716,6 +730,7 @@ class Feeder:
             direct = sum(float(v) for v in d.values()) - later
             am = f.get("am") or ""
             if am.startswith("player:"):
+                self.core.skill(t, am[7:], f.get("sk") or "", float(f.get("sl") or 0))
                 self.core.hit(t, f.get("u"), am[7:], direct, later)
             elif f.get("att") in self._follows:
                 self.core.summon_hit(t, f.get("u"), self._follows[f["att"]], am.split("*", 1)[0], direct, later,
@@ -820,7 +835,7 @@ def _run(facts):
         if e not in RESULTS:
             return  # "gone": never summed
         key = (int(t // 60), e, p, i)
-        sums[key] = sums.get(key, 0) + n
+        sums[key] = max(sums.get(key, 0), n) if e in HIGHEST else sums.get(key, 0) + n
     feeder = Feeder(out)
     last = facts[0]["t"]
     for ev in facts:

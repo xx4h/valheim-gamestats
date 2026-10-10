@@ -128,6 +128,43 @@ class Effective(unittest.TestCase):
         self.assertAlmostEqual(self.total(got, "edmg"), 300 * 1.6)
 
 
+class Skills(unittest.TestCase):
+    """A player's skill levels as combat shows them (skill): a routed hit carries its attacker's level in the weapon's
+    skill; a blood magic cost tells the level by how much less than the full cost it took."""
+
+    def run_facts(self, facts):
+        got = []
+        feeder = combat.Feeder(lambda t, e, p, i, n: got.append((e, p, i, n)) if e == "skill" else None)
+        for t, f in facts:
+            feeder.feed(t, f)
+        feeder.end(facts[-1][0])
+        return got
+
+    def test_from_routed_hits(self):
+        hit = {"k": "hit", "u": "1:5", "m": "Troll", "d": {"slash": 40}, "ht": "PlayerHit", "x": 0, "y": 0, "z": 0}
+        got = self.run_facts([(10.0, {"k": "meta0"}),
+                              (10.1, dict(hit, am="player:Ragnar", sk="Swords", sl=54)),
+                              (10.2, dict(hit, am="player:Ragnar", sk="Bows", sl=0)),       # an arrow: no level
+                              (10.3, dict(hit, am="Skeleton_Friendly", sk="Swords", sl=0)),  # not a player
+                              (10.4, dict(hit, am="player:Astrid", sk="None", sl=10))])
+        self.assertEqual(got, [("skill", "Ragnar", "Swords", 54.0)])
+
+    def test_from_blood_magic(self):
+        cost = {"k": "meta", "s": "cost", "d": {"StaffSkeleton/staff_summon": {"f": 40, "p": 0}}}
+        paid = 40 * (1 - 0.33 * 0.5)  # level 50
+        got = self.run_facts([(10.0, {"k": "meta0"}), (10.0, cost),
+                              (10.1, {"k": "attack", "p": "Sigrid", "w": "StaffSkeleton", "an": "staff_summon"}),
+                              (10.2, {"k": "player", "p": "Sigrid", "b": 100, "a": 100 - paid, "mb": 100, "ma": 100})])
+        (e, p, i, n), = got
+        self.assertEqual((e, p, i), ("skill", "Sigrid", "BloodMagic"))
+        self.assertAlmostEqual(n, 50, places=3)
+
+    def test_a_minute_keeps_the_highest(self):
+        hit = {"k": "hit", "u": "1:5", "m": "Troll", "d": {"slash": 40}, "am": "player:Ragnar", "sk": "Swords"}
+        res = combat._run([dict(hit, t=60.0 + k, e="cf", sl=sl) for k, sl in enumerate((54, 55, 54))])
+        self.assertEqual([r[1:] for r in res if r[1] == "skill"], [["skill", "Ragnar", "Swords", 55]])
+
+
 class Recompute(unittest.TestCase):
     FIXTURE = os.path.join(HERE, "afternoon.jsonl.gz")
 
