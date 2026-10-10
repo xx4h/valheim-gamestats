@@ -25,6 +25,7 @@ static class Replay
         var core = new CombatCore((e, p, i, n) => Add(now, e, p, i, n));
         // an attack line is followed by its trigger line (the animation, for health costs): hold it one line
         (float T, string P, string W)? held = null;
+        var last = 0f; // the latest time seen: player lines of older traces have none
         void Flush(string animation)
         {
             if (held is var (t, p, w))
@@ -37,6 +38,8 @@ static class Replay
                 continue;
             var j = JsonDocument.Parse(line).RootElement;
             var kind = j.GetProperty("k").GetString();
+            if (Has(j, "t"))
+                last = F(j, "t");
             if (held != null)
                 Flush(kind == "trig" && S(j, "m") == "player:" + held.Value.P && F(j, "t") == held.Value.T ? S(j, "tr") : null);
             switch (kind)
@@ -55,7 +58,7 @@ static class Replay
                     core.Loot(F(j, "t"), S(j, "u"), S(j, "i"), long.Parse(S(j, "u").Split(':')[0]), Pos(j));
                     break;
                 case "player":
-                    core.PlayerHealth(S(j, "p"), F(j, "b"), F(j, "a"), F(j, "mb"), F(j, "ma"), Has(j, "t") ? F(j, "t") : 0f);
+                    core.PlayerHealth(S(j, "p"), F(j, "b"), F(j, "a"), F(j, "mb"), F(j, "ma"), last);
                     break;
                 case "health":
                     core.CreatureHealth(F(j, "t"), S(j, "u"), S(j, "m"), Pos(j), F(j, "b"), F(j, "a"), Players(j, "l"));
@@ -160,6 +163,9 @@ static class Replay
         if (j.TryGetProperty("cost", out var cost) && cost.ValueKind == JsonValueKind.Object)
             foreach (var c in cost.EnumerateObject())
                 meta.Costs[c.Name] = ((float)c.Value.GetProperty("f").GetDouble(), (float)c.Value.GetProperty("p").GetDouble());
+        else if (cost.ValueKind == JsonValueKind.Array) // first trace v2 builds: [{"w","a","f","p"}]
+            foreach (var c in cost.EnumerateArray())
+                meta.Costs[S(c, "w") + "/" + S(c, "a")] = (F(c, "f"), F(c, "p"));
         if (j.TryGetProperty("reach", out var reach))
             foreach (var r in reach.EnumerateObject())
                 meta.Reach[r.Name] = (float)r.Value.GetDouble();

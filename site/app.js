@@ -325,7 +325,7 @@
     for (const [t, p, e, i, n] of d.gather || []) {
       if (t < a || t >= b || (only && p !== only) || !per.has(p)) continue;
       const r = per.get(p);
-      const key = { dist: 'dist', crouch: 'crouch', exh: 'exh', exhn: 'exhn', emote: 'emotes', bed: 'beds', pick: 'picked', loot: 'looted', fell: 'felled', mine: 'mined', kill: 'kills', dmg: 'dealt', taken: 'taken', hit: 'hitsTaken', wkill: 'wkills', wdmg: 'wdealt', kw: 'kwc', dw: 'dwc' }[e];
+      const key = { dist: 'dist', crouch: 'crouch', exh: 'exh', exhn: 'exhn', emote: 'emotes', bed: 'beds', pick: 'picked', loot: 'looted', fell: 'felled', mine: 'mined', kill: 'kills', dmg: 'dealt', taken: 'taken', hit: 'hitsTaken', cost: 'paid', wkill: 'wkills', wdmg: 'wdealt', kw: 'kwc', dw: 'dwc' }[e];
       if (!key) continue;
       r[key] = (r[key] || 0) + n;
       (r.gathered ||= {})[key] ||= new Map();
@@ -2621,7 +2621,9 @@
         kpi('Favourite weapon', weapon ? gatherLabel(weapon[0]) : '–', weapon ? `${nf(weapon[1])} damage · ${plural(weaponKills, 'kill')}` : null,
           weapon && hasItemPage(weapon[0]) ? { title: 'About this weapon', href: itemHref(weapon[0]) } : null),
         kpi('Damage taken', nf(taken), r.hitsTaken ? plural(r.hitsTaken, 'hit') : null),
-        kpi('Taken per hour', hours && taken ? nf(taken / hours) : '–', 'from any source'));
+        kpi('Taken per hour', hours && taken ? nf(taken / hours) : '–', 'from any source'),
+        // blood magic takes its cost from health: paid, not damage taken (plugin: CombatCore, docs/ATTRIBUTION.md)
+        r.paid ? kpi('Health paid', nf(r.paid), mostly('paid') ? `for blood magic · ${mostly('paid')}` : 'for blood magic') : null);
     };
 
     const byname = bynameOf(p), animal = animalOf(p);
