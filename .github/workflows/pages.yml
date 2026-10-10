@@ -1,6 +1,8 @@
 # The demo on GitHub Pages: seven made-up Vikings, ~350 in-game days (demo/generate.py), on the page as it is on main,
 # and the README's animation recorded from it (demo/showcase.sh: showcase.webp, desktop and phone side by side, next to
 # the page). Built again every day, so the demo's history always ends today.
+# The game's art on it (item icons, item and creature stats, the player figures) is extracted from the public dedicated
+# server, as on a real deployment (tools/README.md); without it (Steam down, an extractor broken) the demo still goes out.
 name: pages
 
 on:
@@ -18,13 +20,58 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # tools/extract_gamedata.py and render_looks.py on the dedicated server (plugin/fetch-refs.sh, its download cached per
+  # Steam build like in ci.yml); their output is cached per build and extractor version, so most days skip all of it
+  gamedata:
+    runs-on: ubuntu-24.04
+    env:
+      STEAM_DIR: ${{ github.workspace }}/../valheim-server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - id: game
+        run: echo "build=$(plugin/game-build.sh)" >> "$GITHUB_OUTPUT"
+      - id: cached
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: gamedata
+          key: gamedata-${{ steps.game.outputs.build }}-${{ hashFiles('tools/extract_gamedata.py', 'tools/render_looks.py') }}
+      - if: steps.cached.outputs.cache-hit != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.STEAM_DIR }}
+          key: valheim-server-${{ steps.game.outputs.build }}
+          restore-keys: valheim-server-
+      - if: steps.cached.outputs.cache-hit != 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: |
+          plugin/fetch-refs.sh
+          pip install --quiet --no-cache-dir UnityPy==1.25.4 numpy==2.5.3 pillow==12.3.0
+          SR=$STEAM_DIR/valheim_server_Data/StreamingAssets/SoftRef
+          python3 tools/extract_gamedata.py "$SR/manifest_extended" "$SR/Bundles" "$STEAM_DIR/valheim_server_Data/resources.assets" gamedata
+          python3 tools/render_looks.py "$SR/manifest_extended" "$SR/Bundles" gamedata/items.json gamedata
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: gamedata
+          path: gamedata
+          retention-days: 1
+
   build:
+    needs: gamedata
+    if: ${{ !cancelled() }}  # also without the game's art
     runs-on: ubuntu-24.04
     container: mcr.microsoft.com/playwright:v1.63.0-noble  # Chromium and Python for the tour; same as the site tests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - run: apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y ffmpeg webp
-      - run: python3 demo/generate.py _site
+      - if: needs.gamedata.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: gamedata
+          path: gamedata
+      - run: if [ -d gamedata ]; then python3 demo/generate.py _site --gamedata gamedata; else python3 demo/generate.py _site; fi
       - run: cd tests/site && npm ci --no-audit --no-fund
       - run: demo/showcase.sh _site _site
         env:

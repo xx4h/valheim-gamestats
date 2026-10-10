@@ -29,7 +29,13 @@ class Demo(unittest.TestCase):
         cls.gen = load_generator()
         cls.dir = tempfile.mkdtemp()
         cls.out = os.path.join(cls.dir, "site")
-        cls.sim = cls.gen.build(cls.out, seed=7, target=120, end=END)
+        # what tools/ extracts from the game, in miniature
+        cls.gamedata = os.path.join(cls.dir, "gamedata")
+        os.makedirs(os.path.join(cls.gamedata, "looks"))
+        for n in ("items.json", "looks/looks.json"):
+            with open(os.path.join(cls.gamedata, n), "w") as f:
+                json.dump({}, f)
+        cls.sim = cls.gen.build(cls.out, seed=7, target=120, end=END, gamedata=cls.gamedata)
         cls.data = test_golden.served(cls.out)
 
     @classmethod
@@ -41,6 +47,10 @@ class Demo(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(self.out, name)), name)
         index = read_json(os.path.join(self.out, "index.json"))
         self.assertTrue(all(os.path.exists(os.path.join(self.out, "c", n)) for n in index["files"]))
+
+    def test_the_games_art_where_a_deployment_serves_it(self):
+        for n in ("items.json", "looks/looks.json"):
+            self.assertTrue(os.path.exists(os.path.join(self.out, "icons", "valheim", n)), n)
 
     def test_a_whole_server(self):
         d = self.data

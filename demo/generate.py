@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The demo: seven made-up Vikings on a made-up world for ~350 in-game days, through the real collector.
 
-    python3 demo/generate.py OUT [--days 350] [--seed 7] [--end <unix time>]
+    python3 demo/generate.py OUT [--days 350] [--seed 7] [--end <unix time>] [--gamedata DIR]
 
 Nothing here is real. A seeded simulation plays the server — sessions, combat, gathering, exploration, raids, boss
 fights, deaths, sleeps, restarts — and writes the events the plugin would have written; world saves every few days
@@ -9,6 +9,9 @@ fights, deaths, sleeps, restarts — and writes the events the plugin would have
 collector does what it does on a real server (collector.build, world_update, terrain_update), and OUT gets the page as
 a static site: site/ plus index.json, c/, terrain.png and explored.png — what CI publishes to GitHub Pages and what the
 README's showcase is recorded from. The same seed gives the same history; --end (default: now) moves it in time.
+--gamedata is what tools/extract_gamedata.py and render_looks.py made from the game's files (item icons, items.json,
+creatures.json, looks/): it goes to OUT/icons/valheim/ as on a real server, for the icons and the figures. Without it the
+page draws what it does without them.
 
 Stdlib only (plus the collector and the test helpers in this repository).
 """
@@ -588,7 +591,7 @@ def terrain(seed=42, size=256, extent=10500.0):
     return gzip.compress(body)
 
 
-def build(out, seed=7, target=350, end=None):
+def build(out, seed=7, target=350, end=None, gamedata=None):
     end = round(end or time.time())
     days = 40
     for _ in range(5):  # how many real days it takes these players to get the world to ~target in-game days
@@ -650,6 +653,8 @@ def build(out, seed=7, target=350, end=None):
         for n in os.listdir(site):
             src = os.path.join(site, n)
             (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, os.path.join(out, n))
+        if gamedata:
+            shutil.copytree(gamedata, os.path.join(out, "icons", "valheim"))
     finally:
         shutil.rmtree(tmp)
     return sim
@@ -664,8 +669,9 @@ def main():
     ap.add_argument("--days", type=int, default=350, help="in-game days to reach (default 350)")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--end", type=float, help="when the history ends, unix time (default: now)")
+    ap.add_argument("--gamedata", help="the game's icons, items, creatures and looks (tools/), for OUT/icons/valheim")
     a = ap.parse_args()
-    build(a.out, a.seed, a.days, a.end)
+    build(a.out, a.seed, a.days, a.end, a.gamedata)
 
 
 if __name__ == "__main__":
