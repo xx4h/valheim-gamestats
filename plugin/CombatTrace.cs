@@ -4,7 +4,8 @@
 // One JSON object per line in BepInEx/gamestats/trace/<UTC day>.jsonl, one per CombatCore call, in call order:
 //   {"k":"attack","t":12.5,"p":"Ragnar","w":"SwordIron"}
 //   {"k":"player","t":12.6,"p":"Ragnar","b":100,"a":80,"mb":120,"ma":120}
-//   {"k":"health","t":13.1,"u":"123:45","m":"Troll*1","x":1,"y":2,"z":3,"b":600,"a":540,"l":[…players…]}
+//   {"k":"health","t":13.1,"u":"123:45","m":"Troll*1","x":1,"y":2,"z":3,"b":600,"a":540,"l":[…players…],"n":2}
+//     (n: players the game scales the creature's damage taken by — 1/(1+0.3(n-1)) — as Game.GetPlayerDifficulty counts them)
 //   {"k":"destroy","t":14,"u":"123:45","m":"Troll*1","tamed":false,"x":…,"h":0,"mh":600,"l":[…],"ps":[…],"srv":false}
 //   {"k":"ragdoll","t":14.2,"u":"124:9","c":"Troll","lv":2,"x":…,"r":"Troll_ragdoll"}
 //   {"k":"tick","t":15,"ps":[…]}
@@ -64,9 +65,9 @@ namespace ValheimGamestats
                 .Num("ma", maxAfter), fact: !(maxAfter < maxBefore - 0.01f && Math.Abs(after - maxAfter) < 0.01f)); // food wearing off: no fact
 
         internal static void Health(float t, string uid, string mob, Vec pos, float before, float after, List<PlayerState> onList,
-            long owner = 0) =>
+            long owner = 0, int near = 0) =>
             Write(new StringBuilder("{\"k\":\"health\"").Num("t", t).Str("u", uid).Str("m", mob).Pos(pos).Num("b", before)
-                .Num("a", after).Players("l", onList).Num("own", owner), fact: true);
+                .Num("a", after).Players("l", onList).Num("own", owner).Num("n", near), fact: true);
 
         internal static void Destroyed(float t, string uid, string mob, bool tamed, Vec pos, float? health, float? maxHealth,
             List<PlayerState> onList, List<PlayerState> players, bool fromServer, long owner = 0, string from = null, string follow = null) =>

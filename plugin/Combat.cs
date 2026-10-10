@@ -120,7 +120,7 @@ namespace ValheimGamestats
             var mob = MobName(zdo, Gather.PrefabName(zdo));
             var pos = Vec(zdo.GetPosition());
             var onList = OnList(zdo);
-            CombatTrace.Health(t, uid, mob, pos, before, after, onList, zdo.GetOwner());
+            CombatTrace.Health(t, uid, mob, pos, before, after, onList, zdo.GetOwner(), Near(zdo.GetPosition()));
             Core.CreatureHealth(t, uid, mob, pos, before, after, onList, zdo.GetOwner());
         }
 
@@ -211,6 +211,23 @@ namespace ValheimGamestats
                 if (!string.IsNullOrEmpty(peer.m_playerName))
                     players.Add(State(peer));
             return players;
+        }
+
+        // How many players the game scales a creature's damage taken by (Game.GetPlayerDifficulty, on its owner's client):
+        // living characters within 100 m, horizontally; at least 1, at most 5.
+        private static int Near(Vector3 pos)
+        {
+            var game = Game.instance;
+            var range = game != null ? game.m_difficultyScaleRange : 100f;
+            var most = game != null ? game.m_difficultyScaleMaxPlayers : 5;
+            var n = 0;
+            foreach (var peer in ZNet.instance.GetPeers())
+            {
+                var character = ZDOMan.instance.GetZDO(peer.m_characterID);
+                if (character != null && !character.GetBool(ZDOVars.s_dead) && Utils.DistanceXZ(character.GetPosition(), pos) < range)
+                    n++;
+            }
+            return Mathf.Clamp(n, 1, most);
         }
 
         // The online players on a creature's attacker list (as the game wrote it, never cleared).
