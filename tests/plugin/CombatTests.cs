@@ -1,4 +1,4 @@
-// CombatCore as released in 1.20.11, pinned: every rule of plugin/Combat.cs's header as a scenario, including the
+// CombatCore's rules, pinned: every rule of plugin/Combat.cs's header as a scenario, including the
 // known weaknesses (marked "known gap") — the PRs that fix them change these tests visibly. Plus the trace round trip:
 // a session recorded with CombatTrace and replayed gives exactly what the plugin made of it.
 using System;

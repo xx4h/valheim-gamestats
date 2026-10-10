@@ -7,7 +7,7 @@ helm lint --strict "$CHART"
 helm lint --strict "$CHART" -f tests/chart/full-values.yaml
 helm template t "$CHART" > /dev/null
 OUT=$(helm template t "$CHART" -f tests/chart/full-values.yaml)
-for want in '"plugin_version": "1.20.11"' '"webhook_env": "GS_ALERTS_WEBHOOK"' '"webhook_env": "GS_FIRST_DISCORD_WEBHOOK"' '"password_env": "GS_FIRST_RCON_PASSWORD"' '"panel_host": "panel.example.com"' 'www.stats.example.com first;' 'second.example.com second;' 'key: first-rcon' 'key: alerts-discord-webhook' 'claimName: stats-data' 'secretName: www.stats.example.com-tls' 'location ^~ /c/' 'immutable' '"path": "/game"' '"events": "custom/BepInEx/gamestats/events"' 'claimName: valheim-server' 'mountPath: /game' '"ragequit": {' '"built": 30' '"steps": ['; do
+for want in '"plugin_version": "1.21.0"' '"webhook_env": "GS_ALERTS_WEBHOOK"' '"webhook_env": "GS_FIRST_DISCORD_WEBHOOK"' '"password_env": "GS_FIRST_RCON_PASSWORD"' '"panel_host": "panel.example.com"' 'www.stats.example.com first;' 'second.example.com second;' 'key: first-rcon' 'key: alerts-discord-webhook' 'claimName: stats-data' 'secretName: www.stats.example.com-tls' 'location ^~ /c/' 'immutable' '"path": "/game"' '"events": "custom/BepInEx/gamestats/events"' 'claimName: valheim-server' 'mountPath: /game' '"ragequit": {' '"built": 30' '"steps": ['; do
   printf '%s\n' "$OUT" | grep -qF "$want" || { echo "missing in the rendered chart: $want"; exit 1; }
 done
 # a server id that isn't a DNS-ish name fails, instead of rendering a broken env var
