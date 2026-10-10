@@ -51,7 +51,7 @@ static class Program
     static bool Consecutive(List<string> lines, long first) =>
         lines.Select(EventStore.SeqOf).SequenceEqual(Enumerable.Range(0, lines.Count).Select(i => first + i));
 
-    static int Main()
+    static int Main(string[] args)
     {
         {
             var dir = Dir();
@@ -132,6 +132,26 @@ static class Program
             else
                 foreach (var problem in Patches.Check(plugin, lib).DefaultIfEmpty(null))
                     Check(problem == null, problem ?? "every hook fits the game's methods and fields");
+        }
+        CombatTests.Run(Check);
+        if (args.Length == 2 && args[0] == "replay")
+        {
+            // dotnet run -- replay <trace.jsonl>: a real session through today's CombatCore, against what the plugin made of it
+            var (now, then) = Replay.Run(args[1]);
+            foreach (var key in now.Keys.Union(then.Keys).OrderBy(k => k))
+            {
+                now.TryGetValue(key, out var a);
+                then.TryGetValue(key, out var b);
+                if (Math.Abs(a - b) >= 1e-3)
+                    Console.WriteLine($"  {key.Item1} {key.Item2} {key.Item3}: then {b:0.##}, now {a:0.##}");
+            }
+            Check(Replay.Same(now, then), $"replay {Path.GetFileName(args[1])}: {then.Count} sums as recorded");
+            var (violations, coverage) = Replay.Invariants(File.ReadLines(args[1]), now);
+            foreach (var v in violations)
+                Console.WriteLine("  " + v);
+            Check(violations.Count == 0, $"replay {Path.GetFileName(args[1])}: invariants I1 (credit needs evidence), I3 (each death once)");
+            foreach (var c in coverage)
+                Console.WriteLine("  coverage " + c);
         }
         Console.WriteLine(failed == 0 ? "all passed" : $"{failed} failed");
         return failed == 0 ? 0 : 1;

@@ -177,6 +177,12 @@ weapons, else the right hand, else `Unarmed`). Events: `pick`, `fell`, `mine`, `
 `enter` / `leave`, `zone`, `dist`, `crouch`, `exh` / `exhn`, `emote`, `bed`, `peak`,
 `sprint`, `closecall`, `fall`, and `dw` / `kw` (damage / kills per `Weapon>Creature`).
 
+The combat rules are `CombatCore.cs`, without game types: `Combat.cs` only reads the game's state and hands it over.
+`tests/plugin` pins every rule as a scenario (the known gaps included, marked as such), and with `[Debug] Trace` on the
+plugin records everything the core is told (`CombatTrace.cs`), so a real session can be replayed through it offline:
+`dotnet run -- replay <trace.jsonl>` in `tests/plugin` shows what today's rules make of it next to what the plugin made
+of it then, checks it against the rules' invariants and prints the coverage per creature (docs/ATTRIBUTION.md, "Checks").
+
 Tamed creatures are not combat (since 1.8.0): hitting or butchering a pet counts
 as neither damage dealt nor a kill. `Pets.cs` logs the death of every tamed creature (one `petdeath` line, not
 summed): its identity (prefab + BaseAI's `spawntime`, the key the collector

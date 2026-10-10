@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The plugin outside the game: its event store, and its hooks checked against the game's assemblies (patches.cs).
+  <!-- The plugin outside the game: its event store, its combat logic (CombatCore, replayed from traces), and its hooks
+       checked against the game's assemblies (patches.cs).
        dotnet run exits non-zero on failure. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -9,6 +10,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../plugin/EventStore.cs" />
+    <Compile Include="../../plugin/CombatCore.cs" />
+    <Compile Include="../../plugin/CombatTrace.cs" />
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.1" />
   </ItemGroup>
 </Project>

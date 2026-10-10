@@ -11,10 +11,11 @@ from logs import read_json  # first: puts collector/ (the package's directory) o
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 CONTRACT = read_json(os.path.join(ROOT, "docs", "events.json"))
 
-# The plugin's emit helpers (Gather.Add, Custody.Log, Dungeons' Log, Gather's Credit, Vitals' Event, Server's Player):
+# The plugin's emit helpers (Gather.Add, Custody.Log, Dungeons' Log, Gather's Credit, Vitals' Event, Server's Player,
+# CombatCore's _add):
 # the event's name is a string literal among their first two arguments ("take" and "off" both, for a ternary).
-EMIT = re.compile(r'(?:\bGather\.Add|(?<![\w.])Add|\bCustody\.Log|(?<![\w.])Log|(?<![\w.])Credit|(?<![\w.])Event'
-                  r'|(?<![\w.])Player)\(([^,;)]*(?:,[^,;)]*)?)')
+EMIT = re.compile(r'(?:\bGather\.Add|(?<![\w.])Add|(?<![\w.])_add|\bCustody\.Log|(?<![\w.])Log|(?<![\w.])Credit'
+                  r'|(?<![\w.])Event|(?<![\w.])Player)\(([^,;)]*(?:,[^,;)]*)?)')
 
 
 def plugin_events():
@@ -89,10 +90,11 @@ class Contract(unittest.TestCase):
     def test_scan_sees_every_way_of_sending(self):
         # the scanner itself, on the forms the plugin uses
         src = r'''Gather.Add("pick", p, i, 1); Add("fell", p); Custody.Log(k ? "take" : "off", p); Event(p, "sprint", x);
-                  Player("death", peer); Credit("mine", n, pos); var s = "{\"e\":\"zone\""; list.Add("nope");'''
+                  Player("death", peer); Credit("mine", n, pos); var s = "{\"e\":\"zone\""; list.Add("nope");
+                  _add("kill", p, mob, 1);'''
         names = ([lit for m in EMIT.finditer(src) for lit in re.findall(r'"([a-z_]+)"', m.group(1))] +
                  re.findall(r'\\"e\\":\\"([a-z_]+)', src))
-        self.assertEqual(sorted(names), ["death", "fell", "mine", "off", "pick", "sprint", "take", "zone"])
+        self.assertEqual(sorted(names), ["death", "fell", "kill", "mine", "off", "pick", "sprint", "take", "zone"])
 
 
 if __name__ == "__main__":
