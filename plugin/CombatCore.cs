@@ -414,8 +414,11 @@ namespace ValheimGamestats
             if (_hitBy.TryGetValue(d.Uid ?? "", out var hitters))
                 foreach (var p in Fighting(d.Players.FindAll(x => hitters.Contains(x.Name)), d.Pos))
                     Add(p);
-            foreach (var p in Struck(d))
+            foreach (var p in Struck(d, ranged: false))
                 Add(p);
+            if (killers.Count == 0)
+                foreach (var p in Struck(d, ranged: true)) // a shot from afar: only when nothing closer explains the death
+                    Add(p);
             _hitBy.Remove(d.Uid ?? "");
             Kill(killers, d.Name, d.Time, d.Signal, d);
             if (killers.Count > 0 && d.Health > 0f)
@@ -451,8 +454,9 @@ namespace ValheimGamestats
             _meta.Names.TryGetValue(kind, out var name) ? name == token : token.EndsWith("_" + kind.ToLowerInvariant());
 
         // The players whose own damaging attack just before the death was in reach of it: melee within MeleeSeconds and the
-        // weapon's reach (+ MeleeMargin), ranged within HitWindow and AttackerRange. One attack is evidence for one death.
-        private List<string> Struck(Death d)
+        // weapon's reach (+ MeleeMargin), ranged within HitWindow and AttackerRange (asked only when nothing else explains
+        // the death: a shot could have been at anything around). One attack is evidence for one death.
+        private List<string> Struck(Death d, bool ranged)
         {
             var names = new List<string>();
             foreach (var p in d.Players)
@@ -466,7 +470,7 @@ namespace ValheimGamestats
                     if (time > d.Time || d.Time - time > HitWindow || _usedAttacks.Contains((p.Name, time)))
                         continue;
                     var w = _meta.Weapons.TryGetValue(weapon, out var known) ? known : (Ranged: false, Reach: MeleeReach, Harmful: true);
-                    if (!w.Harmful)
+                    if (!w.Harmful || w.Ranged != ranged)
                         continue;
                     var reach = w.Ranged ? AttackerRange : w.Reach + MeleeMargin;
                     if ((w.Ranged || d.Time - time <= MeleeSeconds) && distance <= reach)
