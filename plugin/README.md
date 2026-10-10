@@ -171,9 +171,21 @@ bigger one is the cost plus a hit merged into the same sync. A mob deleted with 
 when its health hit 0, so someone who dies right after still counts); its
 name carries the stars (`Troll*1`). One-hit kills are deleted before their
 last state syncs, so the ragdoll every death spawns (a networked object) is
-the second signal: a ragdoll without a counted death nearby is a kill for the
-attackers the server knows, else the nearest player within 15 m, with the
-mob's last known health as damage. Damage and kills are also logged per
+the second signal: a ragdoll without a counted death of a kind it belongs to
+(several kinds can share one) nearby is a kill for the
+attackers the server knows, with the mob's last known health as damage. Every
+death is credited 3 s after it to its attacker list's players plus those the
+other evidence names: the game's kill note (`RPC_RegisterKill`, routed by the
+server), a routed hit of theirs (`RPC_Damage`), their own damaging attack just
+before in reach of it (one attack for one death). A death with no evidence for
+its killer is never guessed from who is near: it's an
+unaccounted kill (`ukill`, no player; a `[Gamestats-unaccounted]` line in the
+server log; docs/ATTRIBUTION.md). Creatures without a ragdoll (Seekers, Ticks,
+Blobs, bosses …) drop their loot at death instead: one deleted with health left
+is a kill when its own loot (its drop table, created by the client that
+deleted it, within 3 m and 2 s) appears — not one deleted on a timer (enemy
+summons). A deletion right after damage that no signal explains is `gone`
+(trace only for now). Damage and kills are also logged per
 weapon: the one attacked with, else the one held (bows and other left-hand
 weapons, else the right hand, else `Unarmed`). Events: `pick`, `fell`, `mine`, `kill`, `wkill`,
 `dmg`, `wdmg`, `taken`, `hit`, `loot`, `take` / `put` / `off` / `on` / `carry`,

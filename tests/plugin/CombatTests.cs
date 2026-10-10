@@ -22,7 +22,7 @@ static partial class CombatTests
                 p ??= ""; // events without a player ("gone": a deletion no signal explains)
                 Out.TryGetValue((e, p, i), out var have);
                 Out[(e, p, i)] = have + n;
-                if (trace && p != "")
+                if (trace && (p != "" || e == "ukill"))
                     CombatTrace.Out(e, p, i, n);
             });
         }
@@ -91,8 +91,10 @@ static partial class CombatTests
             s.Core.Attack(10f, "Ragnar", "SwordIron");
             s.Core.CreatureHealth(10.5f, "1:1", "Troll*1", Here, 50f, -5f, L(P("Ragnar", At(3)), P("Astrid", At(3))));
             s.Core.Destroyed(12f, "1:1", "Troll*1", false, Here, 0f, 1200f, L(P("Ragnar", At(3), dead: true)), L(P("Ragnar", At(3))));
+            check(s.Out.Keys.All(k => k.Item1 != "kill"), "kill: not at the deletion itself — the game's kill note can still be on its way");
+            s.Core.Tick(15f, L(P("Ragnar", At(3))));
             check(s.Get("kill", "Ragnar", "Troll*1") == 1 && s.Get("kill", "Astrid", "Troll*1") == 1,
-                "kill: at the deletion with health ≤ 0, for whoever was in the fight at health 0 (even if dead since)");
+                "kill: 3 s after a deletion with health ≤ 0, for whoever was in the fight at health 0 (even if dead since)");
             check(s.Get("kw", "Ragnar", "SwordIron>Troll*1") == 1, "kill: with the weapon of their last attack");
             s.Core.Ragdoll(12.2f, "9:9", "Troll", 2, Here);
             s.Core.Tick(16f, L(P("Ragnar", At(1))));
@@ -113,11 +115,8 @@ static partial class CombatTests
             var s = new Sim();
             s.Core.Ragdoll(30f, "7:7", "Neck", 3, At(5));
             s.Core.Tick(33.5f, L(P("Astrid", At(20)), P("Ragnar", At(10), held: "Bow")));
-            check(s.Get("kill", "Ragnar", "Neck*2") == 1 && s.Get("kill", "Astrid", "Neck*2") == 0,
-                "kill: a ragdoll with no known death — the nearest player within 15 m, named with its stars");
-            s.Core.Ragdoll(40f, "6:6", "Neck", 1, At(5));
-            s.Core.Tick(44f, L(P("Ragnar", At(40))));
-            check(s.Get("kill", "Ragnar", "Neck") == 0, "kill: nobody within 15 m — no kill");
+            check(s.Sum("kill", "Ragnar") == 0 && s.Sum("kill", "Astrid") == 0 && s.Get("ukill", "", "Neck*2") == 1,
+                "kill: a ragdoll with no known death — nobody is guessed from being near: an unaccounted kill, named with its stars");
         }
         {
             var s = new Sim();
@@ -135,7 +134,7 @@ static partial class CombatTests
             s.Core.Ragdoll(60.7f, "r:1", "Bonemass", 1, At(1)); // its ragdoll lands nearer the Blob's death
             s.Core.Tick(65f, L(P("Ragnar", At(3))));
             check(s.Get("kill", "Ragnar", "Bonemass") == 0,
-                "known gap: a ragdoll matches the nearest death of any creature — the Blob's took Bonemass's");
+                "without the ragdolls' kinds (older traces): a ragdoll matches the nearest death of any creature — the Blob's took Bonemass's (with them: the deaths in AttributionTests)");
         }
 
         // ---- damage taken
@@ -155,7 +154,8 @@ static partial class CombatTests
             s.Core.Ragdoll(3f, "4:4", "Deer", 1, At(1));
             s.Core.Destroyed(3f, "d:1", "Deer", false, At(1), 5f, 10f, L(), L(P("Ragnar", At(1), held: "Bow")));
             s.Core.Tick(7f, L());
-            check(s.Out.Count == 0, "a player who left gets nothing from a ragdoll (no character to be near)");
+            check(s.Out.Keys.All(k => k.Item1 == "ukill") && s.Get("ukill", "", "Deer") == 1,
+                "a player who left gets nothing from a ragdoll: an unaccounted kill");
         }
 
         // ---- the trace round trip
@@ -205,7 +205,7 @@ static partial class CombatTests
             var (now, then) = Replay.Run(file);
             check(then.Count > 0 && Replay.Same(now, then),
                 $"trace: a recorded session replays to exactly what the plugin made of it ({then.Count} sums, names with quotes)");
-            check(now.ContainsKey(("kill", "Ragnar", "Greyling")), "trace: missing health (null) survives the round trip");
+            check(now.ContainsKey(("ukill", "", "Greyling")), "trace: missing health (null) survives the round trip");
             var facts = File.ReadLines(file).Select(l => System.Text.Json.JsonDocument.Parse(l).RootElement)
                 .Where(j => j.GetProperty("k").GetString() is "meta" or "trig" or "hit" or "killnote" or "rise" or "pethp" or "owner" or "drop").ToList();
             var hit = facts.First(j => j.GetProperty("k").GetString() == "hit");

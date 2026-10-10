@@ -198,7 +198,7 @@ class FromTheStore(unittest.TestCase):
 
     def test_bookkeeping_is_not_gathered(self):
         st = Store()
-        for e in ("plugin", "start", "stop", "login", "logout", "warn", "raidend", "server", "sleep", "lobby"):
+        for e in ("plugin", "start", "stop", "login", "logout", "warn", "raidend", "server", "sleep", "lobby", "gone"):
             st.add(0, e=e, p="", i="x", n=1, uid=1, zdos=1, time=1, to=2, msg="m")
         self.assertEqual(Valheim.rebuild(self.events(st), T0 + 60)["gather"], [])
 

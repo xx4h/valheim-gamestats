@@ -63,6 +63,15 @@
     "test_rebuild.Combat.test_kill_per_weapon"
    ]
   },
+  "ukill": {
+   "from": "CombatCore.cs",
+   "becomes": "gather",
+   "page": "Unaccounted kills",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Combat.test_unaccounted_kills_have_no_player"
+   ]
+  },
   "wkill": {
    "from": "CombatCore.cs",
    "becomes": "gather",
@@ -122,6 +131,14 @@
    "page": "Health paid (player page)",
    "tests": [
     "test_rebuild.EveryKind.test_every_summed_event"
+   ]
+  },
+  "gone": {
+   "from": "CombatCore.cs",
+   "becomes": "nothing",
+   "page": "Not sent yet (no player: Gather drops it): a creature deleted right after damage that no death signal explains — trace and replay only, until the coverage measurement uses it",
+   "tests": [
+    "test_events.FromTheStore.test_bookkeeping_is_not_gathered"
    ]
   },
   "dist": {
