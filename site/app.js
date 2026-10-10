@@ -2408,7 +2408,8 @@
         el('td', null, el('span', { class: 'who' }, el('i', { class: 'sw', style: { background: colorOf(r.p) } }), r.p)),
         el('td', { class: 'r', title: r.impactParts.length ? `Impact ${nf(r.impact, 1)}: ${r.impactParts.map(([key, v]) => `${LABEL[key]} ${sign(v)}`).join(' · ')}` : null }, mv('impact', r)),
         el('td', null, el('span', { class: 'share' }, el('span', { style: { width: `${c.total ? (r.play / c.total) * 100 : 0}%`, background: colorOf(r.p) } })), mv('play', r)),
-        ...['sessions', 'avg', 'longest', 'nDays', 'deaths', 'dph', 'drain', ...(world ? ['built'] : []), 'found', ...(gather ? ['picked', 'felled', 'mined', 'kills', 'dealt', 'taken', 'hitsTaken'] : [])]
+        // the plain stat columns, in header order (a list of its own here once dropped Travelled / Max health)
+        ...cols.map(([, key]) => key).filter((key) => FMT[key] && key !== 'impact' && key !== 'play')
           .map((key) => el('td', { class: 'r', title: gatherTip(r, key) }, mv(key, r))),
         el('td', null, r.online ? el('span', { class: 'badge on', text: 'online' }) : el('span', { class: 'badge', text: r.last ? fAgo(S.data.generated - r.last) : '–' })))));
       if (!tbody.children.length) tbody.append(el('tr', null, el('td', { colspan: cols.length, class: 'empty-state', text: 'No matching player.' })));

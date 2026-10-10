@@ -106,6 +106,18 @@ test('no support card without a link', async ({ page }) => {
   await expect(page.locator('#support')).toBeHidden();
 });
 
+test('leaderboard cells line up with its header', async ({ page }) => {
+  await start(page);
+  await expect(page.locator('#leaderboard thead th').last()).toHaveText('Last seen');
+  // one snapshot of the table (it may redraw while we look): every row has a cell per column,
+  // the last one being Last seen's online / ago badge
+  await expect.poll(() => page.evaluate(() => {
+    const n = document.querySelectorAll('#leaderboard thead th').length;
+    const rows = [...document.querySelectorAll('#leaderboard tbody tr')];
+    return rows.length > 0 && rows.every((tr) => tr.children.length === n && !!tr.lastElementChild.querySelector('.badge'));
+  })).toBe(true);
+});
+
 test('no sideways scrolling', async ({ page }) => {
   await start(page);
   for (const hash of ['#/', '#/world', '#/base', '#/items', `#/p/${encodeURIComponent(players[0])}`]) {
