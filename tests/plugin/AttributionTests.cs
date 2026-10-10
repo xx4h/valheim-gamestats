@@ -2,6 +2,7 @@
 // situations too, which a solo session can't show. The invariants they keep (I1–I5) are in docs/ATTRIBUTION.md, "Checks".
 //   blood magic   a health-cost attack's cost is health paid, not damage taken
 //   deaths        health 0, a ragdoll of its own kind (several kinds can share one), or its own loot from the same client
+//   evidence      who killed it: the attacker list, the game's kill note, a routed hit, one's own attack just before in reach
 //   unaccounted   a death with no evidence for its killer is `ukill` (no player), never guessed from who is near
 using System;
 using System.Collections.Generic;
@@ -24,6 +25,13 @@ static partial class CombatTests
         m.Costs["StaffShield/staff_shield"] = (0f, 40f);
         m.Reach["Skeleton_Friendly/attack"] = 2.5f;
         m.Reach["Skeleton_Friendly/attack_bow"] = 30f;
+        m.Ragdolls["Hare_ragdoll"] = new List<string> { "Hare" };
+        m.Names["Greyling"] = "$enemy_greyling";
+        m.Names["Boar"] = "$enemy_boar";
+        m.Names["Hare"] = "$animal_hare";
+        m.Weapons["THSwordKrom"] = (false, 2.8f, true);
+        m.Weapons["BowDraugrFang"] = (true, 0f, true);
+        m.Weapons["StaffShield"] = (false, 0f, false);
         return m;
     }
 
@@ -203,6 +211,83 @@ static partial class CombatTests
             s.Core.Tick(20f, L(M(Off(Here, 2))));
             check(s.Get("kill", "M", "Boar") == 1 && s.Out.Keys.All(k => k.Item1 != "ukill"),
                 "unaccounted guard: a credited death is never also unaccounted (its ragdoll finds it counted)");
+        }
+
+        // ======== evidence for the killer, when its attacker list never synced (one-hit kills) ========
+        const long Owner = 555; // the client that ran the creature
+        PlayerState Stick(float dx) => P("Stick", Off(Here, dx), held: "THSwordKrom");
+        void OneHit(Sim s, float t, string uid, string kind, long by, Vec at, List<PlayerState> players, string ragdoll = null)
+        {
+            s.Core.Destroyed(t, uid, kind, false, at, null, 20f, L(), players, by: by);
+            if (ragdoll != null)
+                s.Core.Ragdoll(t + 0.2f, uid + "r", kind, 1, at, ragdoll);
+        }
+        {
+            // a recorded session: Stick one-shot a Greyling that Dr Markus Söder's client ran; its note named Stick
+            var s = New();
+            OneHit(s, 7163.1f, "1:40907", "Greyling", Owner, Here, L(Stick(5)), "Greyling_ragdoll");
+            s.Core.KillNote(7163.14f, Owner, "Stick", "$enemy_greyling");
+            s.Core.Tick(7170f, L(Stick(5)));
+            check(s.Get("kill", "Stick", "Greyling") == 1 && s.Sum("ukill", "") == 0, "evidence: the game's kill note names the killer");
+        }
+        void NoNote(string what, long from, string token, float dt)
+        {
+            var s = New();
+            OneHit(s, 10f, "1:1", "Greyling", Owner, Here, L(Stick(5)), "Greyling_ragdoll");
+            s.Core.KillNote(10f + dt, from, "Stick", token);
+            s.Core.Tick(20f, L(Stick(5)));
+            check(s.Sum("kill", "Stick") == 0 && s.Get("ukill", "", "Greyling") == 1, "evidence guard: " + what);
+        }
+        NoNote("a kill note from another client is no evidence for this death", 777, "$enemy_greyling", 0.05f);
+        NoNote("a kill note of another kind is no evidence for this death", Owner, "$enemy_boar", 0.05f);
+        NoNote("a kill note 10 s later is no evidence for this death", Owner, "$enemy_greyling", 10f);
+        {
+            var s = New();
+            s.Core.Hit(9f, "1:2", "Stick", 45f);
+            OneHit(s, 9.1f, "1:2", "Greyling", Owner, Here, L(Stick(20)), "Greyling_ragdoll");
+            s.Core.Tick(15f, L(Stick(20)));
+            check(s.Get("kill", "Stick", "Greyling") == 1, "evidence: a routed hit of theirs on it");
+        }
+        {
+            var s = New();
+            s.Core.Hit(9f, "1:3", "Stick", 0f); // a shield or a status effect: no damage
+            OneHit(s, 9.1f, "1:3", "Greyling", Owner, Here, L(Stick(20)), "Greyling_ragdoll");
+            s.Core.Tick(15f, L(Stick(20)));
+            check(s.Sum("kill", "Stick") == 0, "evidence guard: a routed hit without damage is no evidence");
+        }
+        void Struck(string what, string weapon, float before, float dx, bool kill)
+        {
+            var s = New();
+            s.Core.Attack(100f - before, "Stick", weapon);
+            OneHit(s, 100f, "1:4", "Hare", Client, Here, L(Stick(dx)), "Hare_ragdoll");
+            s.Core.Tick(110f, L(Stick(dx)));
+            check(kill ? s.Get("kill", "Stick", "Hare") == 1 && Near(s.Get("dmg", "Stick", "Hare"), 20) : s.Sum("kill", "Stick") == 0 && s.Get("ukill", "", "Hare") == 1,
+                (kill ? "evidence: " : "evidence guard: ") + what);
+        }
+        Struck("their own melee swing 0.6 s before, 2 m away (and its health as damage)", "THSwordKrom", 0.6f, 2f, true);
+        Struck("their own bow shot 0.3 s before, 8 m away", "BowDraugrFang", 0.3f, 8f, true);
+        Struck("a melee swing 2 s before is no evidence", "THSwordKrom", 2f, 2f, false);
+        Struck("a melee swing 10 m away is no evidence", "THSwordKrom", 0.6f, 10f, false);
+        Struck("a bow shot 80 m away is no evidence", "BowDraugrFang", 0.3f, 80f, false);
+        Struck("a cast without damage (shield) is no evidence", "StaffShield", 0.5f, 2f, false);
+        {
+            // one swing, two hares dying in reach at once: it killed one of them
+            var s = New();
+            s.Core.Attack(99.5f, "Stick", "THSwordKrom");
+            OneHit(s, 100f, "1:5", "Hare", Client, Here, L(Stick(2)), "Hare_ragdoll");
+            OneHit(s, 100f, "1:6", "Hare", Client, Off(Here, 1), L(Stick(2)), "Hare_ragdoll");
+            s.Core.Tick(110f, L(Stick(2)));
+            check(s.Get("kill", "Stick", "Hare") == 1 && s.Get("ukill", "", "Hare") == 1, "evidence guard (I2): one attack is evidence for one death");
+        }
+        {
+            // two players both struck it just before: everyone who hit it
+            var s = New();
+            s.Core.Attack(99.5f, "Stick", "THSwordKrom");
+            s.Core.Attack(99.7f, "Astrid", "THSwordKrom");
+            OneHit(s, 100f, "1:7", "Hare", Client, Here, L(Stick(2), P("Astrid", Off(Here, -2)), P("Ragnar", Off(Here, 3))), "Hare_ragdoll");
+            s.Core.Tick(110f, L(Stick(2)));
+            check(s.Get("kill", "Stick", "Hare") == 1 && s.Get("kill", "Astrid", "Hare") == 1 && s.Sum("kill", "Ragnar") == 0,
+                "evidence (group): both players who struck it get the kill, the one standing next to it who didn't, nothing");
         }
     }
 }

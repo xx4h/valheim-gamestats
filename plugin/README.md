@@ -173,8 +173,12 @@ name carries the stars (`Troll*1`). One-hit kills are deleted before their
 last state syncs, so the ragdoll every death spawns (a networked object) is
 the second signal: a ragdoll without a counted death of a kind it belongs to
 (several kinds can share one) nearby is a kill for the
-attackers the server knows, with the mob's last known health as damage. A death
-with no evidence for its killer is never guessed from who is near: it's an
+attackers the server knows, with the mob's last known health as damage. Every
+death is credited 3 s after it to its attacker list's players plus those the
+other evidence names: the game's kill note (`RPC_RegisterKill`, routed by the
+server), a routed hit of theirs (`RPC_Damage`), their own damaging attack just
+before in reach of it (one attack for one death). A death with no evidence for
+its killer is never guessed from who is near: it's an
 unaccounted kill (`ukill`, no player; a `[Gamestats-unaccounted]` line in the
 server log; docs/ATTRIBUTION.md). Creatures without a ragdoll (Seekers, Ticks,
 Blobs, bosses …) drop their loot at death instead: one deleted with health left

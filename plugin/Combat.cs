@@ -24,6 +24,8 @@
 //   A ragdoll (only matched to a death of a kind that spawns it) without a counted
 //   death is such a one-hit kill: the attackers
 //   the server knows get the kill and the mob's last known health as damage.
+//   Every death is credited 3 s later to its list's players and to those the
+//   game's kill note, a routed hit or their own attack in reach names.
 //   Names carry the stars: Troll*1. A death with nobody to credit is never
 //   guessed from who is near: `ukill` (no player), and a log line to investigate.
 //   Kinds without a ragdoll drop their loot at death instead: a deletion with
