@@ -566,6 +566,8 @@ def build(out, seed=7, target=350, end=None):
                 with open(os.path.join(game, "manifest"), "w") as f:
                     f.write("\n".join(f"Assets/GameElements/{'Pieces/' if n in PIECE_NAMES else ''}{n}.prefab"
                                       for n in sorted(names.values())))
+                # the collector re-reads the manifest when its time changes: the save's own, not whatever second this is
+                os.utime(os.path.join(game, "manifest"), (t, t))
                 clock[0] = t
                 collector.world_update(server, CFG, sdir)
             collector.terrain_update(server, sdir)

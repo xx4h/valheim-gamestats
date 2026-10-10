@@ -54,6 +54,8 @@ class Demo(unittest.TestCase):
         self.assertTrue(d["world"]["named_tames"] and d["world"]["signs"] and d["world"]["portals"])
         self.assertGreater(len(d["world_history"]), 1)
         self.assertEqual(d["scoring"]["changed"], {})
+        # every prefab named: the manifest the collector reads changes with each save (its time is the save's)
+        self.assertEqual([k for k in d["world"]["items"] if k.startswith("#")], [])
 
     def test_exploring_together_credits_only_who_was_there(self):
         # the demo keeps the rules it shows off: a zone is credited to players online at the time
