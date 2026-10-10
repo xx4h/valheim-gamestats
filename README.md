@@ -141,10 +141,12 @@ plugin attached to the [release](https://github.com/xx4h/valheim-gamestats/relea
 
 The demo (`demo/generate.py`) plays a made-up server through the real collector: seven Vikings, ~350 in-game days,
 seeded, so the same history every time. `.github/workflows/pages.yml` publishes it to GitHub Pages daily (its history
-ends today); `test_demo.py` keeps it working; `demo/showcase.sh` records the animation above from it there (it lives on Pages, not in the repository).
+ends today), with the game's icons and player figures extracted from the dedicated server on the way
+(`--gamedata`); `test_demo.py` keeps it working; `demo/showcase.sh` records the animation above from it there (it lives on Pages, not in the repository).
 
 ## License
 
 The code is [MIT](LICENSE). The Valheim logo and the favicons made from it are Iron Gate's, from their
 [press kit](https://www.valheimgame.com/press/), and not covered by the MIT license — see [NOTICE](NOTICE). This project
-ships none of the game's files: CI fetches what the plugin builds against from the public dedicated server.
+ships none of the game's files: CI fetches what the plugin builds against from the public dedicated server, and the
+demo's icons and figures are extracted from it when Pages is built.

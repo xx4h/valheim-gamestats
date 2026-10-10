@@ -12,3 +12,7 @@ Not covered by the MIT license:
 
 The game itself is not part of this repository or its images: the plugin is built against the Valheim dedicated server
 as published on Steam (plugin/fetch-refs.sh), and loads into it at runtime.
+
+The demo on GitHub Pages shows the game's item icons, item and creature stats and player figures. They are Iron
+Gate's, not covered by the MIT license and not in this repository: the Pages workflow extracts them from the dedicated
+server at build time (tools/extract_gamedata.py, tools/render_looks.py), as every deployment does for its own page.
