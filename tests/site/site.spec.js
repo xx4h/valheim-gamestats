@@ -297,7 +297,8 @@ test('unaccounted kills: their own page, never a player', async ({ page }) => {
     if (!added && Array.isArray(body.gather) && body.gather.length) {
       added = true;
       const t = Math.max(...body.gather.map((g) => g[0]));
-      body.gather.push([t, '', 'ukill', 'Tick', 2], [t, '', 'ukill', 'Goblin/GoblinArcher*1', 1], [t - 3600, '', 'ukill', 'Dverger', 1]);
+      body.gather.push([t, '', 'ukill', 'Tick', 2], [t, '', 'ukill', 'Goblin/GoblinArcher*1', 1], [t - 3600, '', 'ukill', 'Dverger', 1],
+        [t, '', 'udmg', 'Gjall', 249]);
     }
     await route.fulfill({ json: body });
   });
@@ -307,6 +308,8 @@ test('unaccounted kills: their own page, never a player', async ({ page }) => {
   await expect(page.locator('.kpis .kpi').first()).toContainText('4');
   await expect(page.getByText(/ or /).first()).toBeVisible();  // a shared ragdoll: every kind it can be
   await expect(page.locator('a[href^="#/creature/Tick"]').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Damage nobody could be credited with' })).toBeVisible();
+  await expect(page.locator('.kpis').first()).toContainText('249');
   await expect(page.locator('a[href^="#/p/"]').filter({ hasText: /^$/ })).toHaveCount(0);  // no empty player anywhere
   await open(page, '#/');
   await expect(page.locator('#sidenav a[href="#/unaccounted"], nav a[href="#/unaccounted"]').first()).toBeAttached();

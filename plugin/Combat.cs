@@ -8,9 +8,10 @@
 // - dmg / wdmg: a mob's health drops in an update the server receives —
 //   credited to the online players in its attacker list who attacked in the
 //   HitWindow before it (Attacks.cs: their swings and shots), one share per
-//   attack, with that attack's weapon. Nobody did (damage over time, a missed
-//   trigger): split evenly, each with the weapon of their last attack, else
-//   what they hold. The game never takes anyone off the attacker list, so
+//   attack, with that attack's weapon — refined by CombatCore.Attribute: routed
+//   hits are exact, their fire / spirit / poison ticks come from their budgets,
+//   the rest is the creature's own client's; nothing of that: `udmg`, unattributed.
+//   The game never takes anyone off the attacker list, so
 //   only attackers alive and within AttackerRange count: someone who died or
 //   left the fight would otherwise keep a share.
 //   Summons and commanded tames (tamed, following a player) never get on the
@@ -61,7 +62,7 @@ namespace ValheimGamestats
         private static void Add(string e, string p, string i, double n)
         {
             Gather.Add(e, p, i, n);
-            if (CombatTrace.Enabled && (!string.IsNullOrEmpty(p) || e == "ukill"))
+            if (CombatTrace.Enabled && (!string.IsNullOrEmpty(p) || e == "ukill" || e == "udmg"))
                 CombatTrace.Out(e, p ?? "", i, n);
         }
 
@@ -121,8 +122,8 @@ namespace ValheimGamestats
             var pos = Vec(zdo.GetPosition());
             var onList = OnList(zdo);
             if (CombatTrace.Enabled)
-                CombatTrace.Health(t, uid, mob, pos, before, after, onList);
-            Core.CreatureHealth(t, uid, mob, pos, before, after, onList);
+                CombatTrace.Health(t, uid, mob, pos, before, after, onList, zdo.GetOwner());
+            Core.CreatureHealth(t, uid, mob, pos, before, after, onList, zdo.GetOwner());
         }
 
         internal static void OnDestroyed(ZDO zdo, GameObject prefab, long sender)
@@ -234,8 +235,9 @@ namespace ValheimGamestats
         {
             var character = ZDOMan.instance.GetZDO(peer.m_characterID); // none while dead / respawning
             return character == null
-                ? new PlayerState(peer.m_playerName, false, false, default, null)
-                : new PlayerState(peer.m_playerName, true, character.GetBool(ZDOVars.s_dead), Vec(character.GetPosition()), HeldWeapon(character));
+                ? new PlayerState(peer.m_playerName, false, false, default, null, peer.m_uid)
+                : new PlayerState(peer.m_playerName, true, character.GetBool(ZDOVars.s_dead), Vec(character.GetPosition()), HeldWeapon(character),
+                    peer.m_uid);
         }
 
         // What they hold: bows and other left-hand weapons, else the right hand, else bare fists.

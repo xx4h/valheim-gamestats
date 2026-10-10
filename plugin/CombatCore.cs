@@ -33,14 +33,16 @@ namespace ValheimGamestats
         public bool Dead;
         public Vec Pos;
         public string Held;
+        public long Client; // their client (peer uid): the one that runs the creatures it owns
 
-        public PlayerState(string name, bool body, bool dead, Vec pos, string held)
+        public PlayerState(string name, bool body, bool dead, Vec pos, string held, long client = 0)
         {
             Name = name;
             Body = body;
             Dead = dead;
             Pos = pos;
             Held = held;
+            Client = client;
         }
     }
 
@@ -57,6 +59,7 @@ namespace ValheimGamestats
         public readonly Dictionary<string, string> Names = new Dictionary<string, string>(); // creature prefab → its name token ($enemy_greyling)
         public readonly Dictionary<string, (bool Ranged, float Reach, bool Harmful)> Weapons =
             new Dictionary<string, (bool, float, bool)>(); // player weapons: projectile or melee, melee reach, does damage at all
+        public readonly Dictionary<string, float> Dots = new Dictionary<string, float>(); // player weapons: fire + spirit + poison, raw
     }
 
     internal class CombatCore
@@ -77,6 +80,9 @@ namespace ValheimGamestats
         internal const float SummonReach = 3f;    // a summon attack whose reach the meta doesn't know: melee
         internal const float SummonMargin = 2f;   // reach counts to the target's surface, positions are centres
         internal const float SummonKillSeconds = 10f; // a summon's hit this long before the death makes its player a killer
+        internal const float RoutedSeconds = 0.4f; // a routed hit and the health drop it causes (seen: ≤ 0.23 s)
+        internal const float DotSeconds = 8f;     // fire / spirit / poison ticks after their hit
+        internal const float FactorDefault = 0.7f; // drop / raw direct damage until a creature's own shows (resistances)
         internal const float CostSeconds = 2f;    // a health-cost attack's cost arrives in the next sync, well within this
         internal const float CostSkillMin = 0.67f; // cost × (1 − 0.33 × skill factor): at skill 100 a third less
         internal const float CostFactorDefault = (1f + CostSkillMin) / 2f; // until a clean cost showed the player's own
@@ -119,6 +125,28 @@ namespace ValheimGamestats
             public Vec Pos;
             public float Reach;
             public string Target;
+            public long Owner;      // its client: its hits on that client's creatures are local, on others' routed
+        }
+
+        // A routed hit (RPC_Damage through the server): who, the direct part (raw, before resistances) and the part that
+        // comes later as fire / spirit / poison ticks.
+        private class RoutedHit
+        {
+            public float Time;
+            public string Player;
+            public string Kind;     // a summon's prefab (its player: Player), null for the player's own hit
+            public float Direct;
+            public float Dot;
+        }
+
+        // What's left of the fire / spirit / poison of someone's hits on a creature, and how big one tick of it can be.
+        private class Budget
+        {
+            public string Player;
+            public string Weapon;
+            public float Left;
+            public float Until;
+            public float Cap;
         }
 
         private class Corpse
@@ -142,6 +170,10 @@ namespace ValheimGamestats
         private readonly List<(float Time, long From, string To, string Kind)> _notes = new List<(float, long, string, string)>();
         private readonly Dictionary<string, HashSet<string>> _hitBy = new Dictionary<string, HashSet<string>>(); // creature uid → players with a routed hit
         private readonly HashSet<(string Player, float Time)> _usedAttacks = new HashSet<(string, float)>(); // evidence for one death each
+        private readonly Dictionary<string, List<RoutedHit>> _routed = new Dictionary<string, List<RoutedHit>>(); // creature uid → hits waiting for their drop
+        private readonly Dictionary<string, List<Budget>> _budgets = new Dictionary<string, List<Budget>>();       // creature uid → DoT budgets
+        private readonly Dictionary<string, List<float>> _factors = new Dictionary<string, List<float>>();        // creature uid → drop / raw direct
+        private readonly Dictionary<(string Uid, string Player), string> _lastOn = new Dictionary<(string, string), string>(); // the weapon they last damaged it with
         private HashSet<string> _withRagdoll = new HashSet<string>(); // kinds whose death spawns a ragdoll (Meta)
         private readonly List<SummonAttack> _summons = new List<SummonAttack>();
         private readonly Dictionary<string, Dictionary<string, (float Time, string Kind)>> _via =
@@ -171,11 +203,47 @@ namespace ValheimGamestats
         // A summon or commanded tame (`follow`: its player) started an attack: it fights for its player.
         // variant: what it holds ("skeleton_sword2+ShieldWood"); it travels with the kind ("Skeleton_Friendly:skeleton_sword2+…")
         // and comes out as the summon events sdw / skw, while dmg / kill & co. name the kind only.
-        internal void Summon(float t, string uid, string kind, string animation, string follow, Vec pos, string variant = null)
+        internal void Summon(float t, string uid, string kind, string animation, string follow, Vec pos, long owner = 0,
+            string variant = null)
         {
             _summons.RemoveAll(a => t - a.Time > Keep);
             var reach = _meta.Reach.TryGetValue(kind + "/" + animation, out var r) && r > 0f ? r : SummonReach;
-            _summons.Add(new SummonAttack { Time = t, Kind = WithVariant(kind, variant), Follow = follow, Pos = pos, Reach = reach });
+            _summons.Add(new SummonAttack { Time = t, Kind = WithVariant(kind, variant), Follow = follow, Pos = pos, Reach = reach,
+                Owner = owner });
+        }
+
+        // A routed hit waits RoutedSeconds for its drop; its fire / spirit / poison opens a budget right away.
+        private void Routed(float t, string uid, string player, string kind, float direct, float dot)
+        {
+            if (_routed.Count > 2000)
+                _routed.Clear();
+            if (!_routed.TryGetValue(uid, out var list))
+                _routed[uid] = list = new List<RoutedHit>();
+            list.RemoveAll(h => t - h.Time > RoutedSeconds);
+            if (direct > 0f)
+                list.Add(new RoutedHit { Time = t, Player = player, Kind = kind, Direct = direct, Dot = dot });
+            if (dot > 0f)
+                Open(uid, player, kind ?? Armed(player, t), dot * Factor(uid), t, 0.5f * dot);
+        }
+
+        private void Open(string uid, string player, string weapon, float amount, float t, float cap)
+        {
+            if (_budgets.Count > 2000)
+                _budgets.Clear();
+            if (!_budgets.TryGetValue(uid, out var list))
+                _budgets[uid] = list = new List<Budget>();
+            list.RemoveAll(b => b.Until < t || b.Left <= 0.01f);
+            list.Add(new Budget { Player = player, Weapon = weapon, Left = amount, Until = t + DotSeconds, Cap = cap });
+        }
+
+        // This creature's drop / raw direct damage so far (its resistances, the world's damage rate), median of the last 20.
+        private float Factor(string uid)
+        {
+            if (!_factors.TryGetValue(uid, out var list) || list.Count == 0)
+                return FactorDefault;
+            var sorted = new List<float>(list);
+            sorted.Sort();
+            return sorted[sorted.Count / 2];
         }
 
         // A new item object; `by`: the client that created it (its uid's user part). Loot of a corpse-less death (Tick).
@@ -197,10 +265,11 @@ namespace ValheimGamestats
 
         // A hit by a player on a creature that another client runs (RPC_Damage routed by the server): exact evidence that
         // they hit it, even when the creature dies before its attacker list syncs.
-        internal void Hit(float t, string uid, string player, float damage)
+        internal void Hit(float t, string uid, string player, float damage, float dot = 0f)
         {
-            if (string.IsNullOrEmpty(player) || damage <= 0f)
+            if (string.IsNullOrEmpty(player) || damage + dot <= 0f)
                 return;
+            Routed(t, uid, player, null, damage, dot);
             if (_hitBy.Count > 5000)
                 _hitBy.Clear();
             if (!_hitBy.TryGetValue(uid, out var players))
@@ -210,11 +279,12 @@ namespace ValheimGamestats
 
         // A summon's or commanded tame's hit on a creature another client runs (routed, with the summon as attacker): exact
         // evidence it hit it, for the player it follows.
-        internal void SummonHit(float t, string uid, string follow, string kind, float damage, string variant = null)
+        internal void SummonHit(float t, string uid, string follow, string kind, float damage, float dot = 0f, string variant = null)
         {
             kind = WithVariant(kind, variant);
-            if (string.IsNullOrEmpty(follow) || damage <= 0f)
+            if (string.IsNullOrEmpty(follow) || damage + dot <= 0f)
                 return;
+            Routed(t, uid, follow, kind, damage, dot);
             if (!_via.TryGetValue(uid, out var players))
                 _via[uid] = players = new Dictionary<string, (float, string)>();
             players[follow] = (t, kind);
@@ -283,7 +353,8 @@ namespace ValheimGamestats
         }
 
         // An untamed creature's health changed. onList: the online players on its attacker list, as they are now.
-        internal void CreatureHealth(float t, string uid, string mob, Vec pos, float before, float after, List<PlayerState> onList)
+        internal void CreatureHealth(float t, string uid, string mob, Vec pos, float before, float after, List<PlayerState> onList,
+            long owner = 0)
         {
             Remember(onList, all: false);
             var afterClamped = Math.Max(0f, after);
@@ -294,7 +365,7 @@ namespace ValheimGamestats
                 _hurt.Clear();
             _hurt[uid] = t;
             var attackers = Fighting(onList, pos);
-            Damage(attackers, mob, lost, t, uid, pos);
+            Attribute(uid, mob, pos, lost, t, onList, owner);
             if (afterClamped <= 0f)
             {
                 // The kill is counted when the mob is deleted, which can be seconds later: whoever was in the fight
@@ -475,6 +546,8 @@ namespace ValheimGamestats
             _hitBy.Remove(d.Uid ?? "");
             _via.Remove(d.Uid ?? "");
             Kill(killers, d.Name, d.Time, d.Signal, d, via);
+            foreach (var p in killers)
+                _lastOn.Remove((d.Uid ?? "", p));
             if (killers.Count > 0 && d.Health > 0f)
                 Damage(killers, d.Name, d.Health, d.Time, via: via);
         }
@@ -601,6 +674,134 @@ namespace ValheimGamestats
             return names;
         }
 
+        // A health drop of a creature, by its causes (docs/ATTRIBUTION.md, "Damage dealt"):
+        //  1. a routed hit just before (RoutedSeconds): its direct part, the drop closest to its expected size — exact;
+        //  2. an open fire / spirit / poison budget, for a drop no bigger than one tick of it;
+        //  3. the client that runs the creature: its player's damaging attacks in the HitWindow and its summons' in reach —
+        //     other clients' hits on it are routed, so they can't be the cause of a drop no routed hit explains; its
+        //     player's damage-over-time weapons within DotSeconds, for a tick;
+        //  4. nothing: unattributed (`udmg`, no player).
+        // Owner unknown (0; older traces): the list's players and summons in reach by their attacks, except players
+        // whose hits on it are routed.
+        private void Attribute(string uid, string mob, Vec pos, float lost, float t, List<PlayerState> onList, long owner)
+        {
+            var left = lost;
+            if (_routed.TryGetValue(uid, out var routed))
+            {
+                routed.RemoveAll(h => t - h.Time > RoutedSeconds);
+                RoutedHit best = null;
+                var factor = Factor(uid);
+                foreach (var h in routed)
+                    if (h.Time <= t + 0.05f && left >= 0.3f * h.Direct * factor
+                        && (best == null || Math.Abs(left - h.Direct * factor) < Math.Abs(left - best.Direct * factor)))
+                        best = h;
+                if (best != null)
+                {
+                    routed.Remove(best);
+                    var expected = best.Direct * factor;
+                    var share = Math.Min(left, 1.5f * expected); // a local hit merged into the same sync: the rest
+                    if (routed.Count == 0 && share / best.Direct is var f && f > 0.05f && f < 2f && share < left + 0.01f)
+                    {
+                        if (!_factors.TryGetValue(uid, out var fs))
+                            _factors[uid] = fs = new List<float>();
+                        fs.Add(f);
+                        if (fs.Count > 20)
+                            fs.RemoveAt(0);
+                    }
+                    Credit(uid, best.Player, best.Kind ?? Armed(best.Player, t), mob, share);
+                    left -= share;
+                    if (left <= 0.01f)
+                        return;
+                }
+            }
+            if (_budgets.TryGetValue(uid, out var budgets))
+            {
+                budgets.RemoveAll(b => b.Until < t || b.Left <= 0.01f);
+                var open = budgets.FindAll(b => left <= b.Cap + 0.01f);
+                var total = 0f;
+                foreach (var b in open)
+                    total += b.Left;
+                if (total > 0.01f)
+                {
+                    var take = Math.Min(left, total);
+                    foreach (var b in open)
+                    {
+                        var share = take * b.Left / total;
+                        b.Left -= share;
+                        Credit(uid, b.Player, b.Weapon, mob, share);
+                    }
+                    left -= take;
+                    if (left <= 0.01f)
+                        return;
+                }
+            }
+            var hits = new List<(string Player, string Weapon)>();
+            var routedHitters = _hitBy.TryGetValue(uid, out var hb) ? hb : new HashSet<string>();
+            foreach (var p in onList)
+            {
+                if (!p.Body || p.Dead || Vec.Distance(p.Pos, pos) > AttackerRange)
+                    continue;
+                if (owner != 0 ? p.Client != owner : routedHitters.Contains(p.Name))
+                    continue; // their hits on it would have been routed
+                foreach (var weapon in Between(p.Name, t - HitWindow, t))
+                    if (Harmful(weapon))
+                        hits.Add((p.Name, weapon));
+            }
+            foreach (var a in SummonsAt(uid, pos, t))
+            {
+                if (owner != 0 && a.Owner != 0 && a.Owner != owner)
+                    continue; // its hits on this creature are routed
+                a.Target = uid;
+                if (!_via.TryGetValue(uid, out var players))
+                    _via[uid] = players = new Dictionary<string, (float, string)>();
+                players[a.Follow] = (t, a.Kind);
+                hits.Add((a.Follow, a.Kind));
+            }
+            if (hits.Count == 0)
+                foreach (var p in onList)
+                    if (p.Body && !p.Dead && (owner != 0 ? p.Client == owner : !routedHitters.Contains(p.Name)))
+                        foreach (var weapon in Between(p.Name, t - DotSeconds, t))
+                            if (_meta.Dots.TryGetValue(weapon, out var dot) && dot > 0f && left <= 0.5f * dot + 0.01f)
+                            {
+                                hits.Add((p.Name, weapon)); // a tick of their own fire / spirit / poison
+                                break;
+                            }
+            if (hits.Count == 0)
+            {
+                _add("udmg", null, mob, left);
+                return;
+            }
+            // summons first: when a player and their summon share a drop, the player's own weapon is the one they "last
+            // damaged it with" (a kill's weapon)
+            var ordered = hits.FindAll(h => IsSummon(h.Weapon));
+            ordered.AddRange(hits.FindAll(h => !IsSummon(h.Weapon)));
+            foreach (var (p, weapon) in ordered)
+                Credit(uid, p, weapon, mob, left / hits.Count);
+        }
+
+        private void Credit(string uid, string player, string weapon, string mob, float amount)
+        {
+            if (_lastOn.Count > 5000)
+                _lastOn.Clear();
+            _lastOn[(uid, player)] = weapon;
+            Dealt(player, weapon, mob, amount);
+        }
+
+        // Their latest damaging attack within Keep, else what WeaponOf says: a shield or summoning cast does no damage, so a
+        // routed hit right after one was made with the weapon before it.
+        private string Armed(string player, float at)
+        {
+            if (_attacks.TryGetValue(player, out var list))
+                for (var k = list.Count - 1; k >= 0; k--)
+                    if (list[k].Time <= at && at - list[k].Time <= Keep && Harmful(list[k].Weapon))
+                        return list[k].Weapon;
+            return WeaponOf(player, at);
+        }
+
+        private bool IsSummon(string weapon) => _summons.Exists(a => a.Kind == weapon);
+
+        private bool Harmful(string weapon) => !_meta.Weapons.TryGetValue(weapon, out var w) || w.Harmful;
+
         // A health drop of `amount` at `at`: one share per attack that can explain it — the attacks in the HitWindow of the
         // players on the list, and of summons in reach of the creature (uid / pos; each binds to the first creature it
         // explains: a single target). None (damage over time, a missed trigger): evenly over the list's players, each
@@ -640,7 +841,10 @@ namespace ValheimGamestats
             }
             foreach (var p in attackers)
             {
-                var weapon = via != null && via.TryGetValue(p, out var kind) ? kind : WeaponOf(p, at);
+                // the weapon they last damaged it with (their own or their summon's), else their summon's, else their last
+                // damaging attack / what they hold
+                var weapon = death?.Uid != null && _lastOn.TryGetValue((death.Uid, p), out var last) ? last
+                    : via != null && via.TryGetValue(p, out var kind) ? kind : Armed(p, at);
                 _add("kill", p, mob, 1);
                 _add("wkill", p, Plain(weapon), 1);
                 _add("kw", p, $"{Plain(weapon)}>{mob}", 1);

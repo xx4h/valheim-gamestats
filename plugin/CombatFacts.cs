@@ -93,6 +93,8 @@ namespace ValheimGamestats
                             reach = Mathf.Max(reach, attack.m_attackRange);
                         }
                     meta.Weapons[go.name] = (ranged, reach, shared.m_damages.GetTotalDamage() > 0f);
+                    if (Later(shared.m_damages) > 0f)
+                        meta.Dots[go.name] = Later(shared.m_damages);
                 }
                 foreach (var attack in new[] { shared.m_attack, shared.m_secondaryAttack })
                     if (attack != null && (attack.m_attackHealth > 0f || attack.m_attackHealthPercentage > 0f))
@@ -152,10 +154,11 @@ namespace ValheimGamestats
             }
             var who = Who(hit.m_attacker);
             if (who != null && who.StartsWith("player:"))
-                Combat.Core.Hit(Time.time, Uid(target), who.Substring(7), hit.m_damage.GetTotalDamage());
+                Combat.Core.Hit(Time.time, Uid(target), who.Substring(7), Direct(hit.m_damage), Later(hit.m_damage));
             else if (!hit.m_attacker.IsNone() && ZDOMan.instance.GetZDO(hit.m_attacker) is ZDO summon && summon.GetBool(ZDOVars.s_tamed)
                      && Follow(summon) is string follow)
-                Combat.Core.SummonHit(Time.time, Uid(target), follow, Gather.PrefabName(summon), hit.m_damage.GetTotalDamage(), Variant(summon));
+                Combat.Core.SummonHit(Time.time, Uid(target), follow, Gather.PrefabName(summon), Direct(hit.m_damage), Later(hit.m_damage),
+                    Variant(summon));
             if (!CombatTrace.Enabled)
                 return;
             var se = hit.m_statusEffectHash == 0 ? null : ObjectDB.instance?.GetStatusEffect(hit.m_statusEffectHash)?.name ?? hit.m_statusEffectHash.ToString();
@@ -212,7 +215,7 @@ namespace ValheimGamestats
                 CombatTrace.Trigger(Time.time, Uid(zdo), Who(zdo), trigger, follow, tamed, zdo.GetOwner(), Vec(zdo.GetPosition()),
                     ItemName(zdo.GetInt(ZDOVars.s_rightItem)), ItemName(zdo.GetInt(ZDOVars.s_leftItem)));
             if (tamed && follow != null)
-                Combat.Core.Summon(Time.time, Uid(zdo), Gather.PrefabName(zdo), trigger, follow, Vec(zdo.GetPosition()), Variant(zdo));
+                Combat.Core.Summon(Time.time, Uid(zdo), Gather.PrefabName(zdo), trigger, follow, Vec(zdo.GetPosition()), zdo.GetOwner(), Variant(zdo));
         }
 
         // ---- world state ---------------------------------------------------------------------------------------------
@@ -299,6 +302,11 @@ namespace ValheimGamestats
             var level = zdo.GetInt(ZDOVars.s_level, 1);
             return level > 1 ? $"{prefab}*{level - 1}" : prefab;
         }
+
+        // What a hit does right away, and what comes later as fire / spirit / poison ticks (Character.RPC_Damage takes those
+        // out after resistances and applies them over time).
+        private static float Later(HitData.DamageTypes d) => d.m_fire + d.m_spirit + d.m_poison;
+        private static float Direct(HitData.DamageTypes d) => d.GetTotalDamage() - Later(d);
 
         private static List<(string, float)> Damages(HitData.DamageTypes d)
         {

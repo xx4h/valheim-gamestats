@@ -146,6 +146,13 @@ class Combat(unittest.TestCase):
         data = rebuild(log)
         self.assertEqual(sorted((r[2], r[3], r[4]) for r in data["gather"]), [("sdw", i, 65), ("skw", i, 1)])
 
+    def test_unattributed_damage_has_no_player(self):
+        # health lost that no evidence ties to anyone: summed per creature, never a player's damage
+        log = Log().g(120, e="udmg", p="", i="Gjall", n=120).g(180, e="udmg", p="", i="Gjall", n=129)
+        data = rebuild(log)
+        self.assertEqual([(r[1], r[3], r[4]) for r in data["gather"] if r[2] == "udmg"], [("", "Gjall", 249)])
+        self.assertEqual(gather(data, "dmg"), 0)
+
     def test_damage_taken_summed(self):
         log = Log().g(120, e="taken", p="Ragnar", i="", n=40).g(180, e="taken", p="Ragnar", i="", n=35)
         self.assertEqual(gather(rebuild(log), "taken", "Ragnar"), 75)

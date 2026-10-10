@@ -62,9 +62,10 @@ namespace ValheimGamestats
             Write(new StringBuilder("{\"k\":\"player\"").Num("t", t).Str("p", player).Num("b", before).Num("a", after).Num("mb", maxBefore)
                 .Num("ma", maxAfter));
 
-        internal static void Health(float t, string uid, string mob, Vec pos, float before, float after, List<PlayerState> onList) =>
+        internal static void Health(float t, string uid, string mob, Vec pos, float before, float after, List<PlayerState> onList,
+            long owner = 0) =>
             Write(new StringBuilder("{\"k\":\"health\"").Num("t", t).Str("u", uid).Str("m", mob).Pos(pos).Num("b", before)
-                .Num("a", after).Players("l", onList));
+                .Num("a", after).Players("l", onList).Num("own", owner));
 
         internal static void Destroyed(float t, string uid, string mob, bool tamed, Vec pos, float? health, float? maxHealth,
             List<PlayerState> onList, List<PlayerState> players, bool fromServer, long owner = 0, string from = null, string follow = null) =>
@@ -113,6 +114,10 @@ namespace ValheimGamestats
             n = 0;
             foreach (var kv in meta.Names)
                 sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(':').Append(Quote(kv.Value));
+            sb.Append('}').Key("dots").Append('{');
+            n = 0;
+            foreach (var kv in meta.Dots)
+                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(':').Append(F(kv.Value));
             sb.Append('}').Key("weapons").Append('{');
             n = 0;
             foreach (var kv in meta.Weapons)
@@ -248,7 +253,7 @@ namespace ValheimGamestats
                     sb.Append(',');
                 sb.Append('{').Append("\"n\":");
                 sb.Append(Quote(p.Name));
-                sb.Bool("b", p.Body).Bool("d", p.Dead).Pos(p.Pos).Str("h", p.Body ? p.Held : null).Append('}');
+                sb.Bool("b", p.Body).Bool("d", p.Dead).Pos(p.Pos).Str("h", p.Body ? p.Held : null).Num("c", p.Client).Append('}');
             }
             return sb.Append(']');
         }

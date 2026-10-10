@@ -4,6 +4,7 @@
 //   deaths        health 0, a ragdoll of its own kind (several kinds can share one), or its own loot from the same client
 //   evidence      who killed it: the attacker list, the game's kill note, a routed hit, one's own attack just before in reach
 //   summons       a summon's attack in reach, or its routed hit, counts for the player it follows, under its name
+//   damage        each drop by its cause: a routed hit (exact), its fire / spirit / poison budget, the creature's own client
 //   unaccounted   a death with no evidence for its killer is `ukill` (no player), never guessed from who is near
 using System;
 using System.Collections.Generic;
@@ -33,6 +34,9 @@ static partial class CombatTests
         m.Weapons["THSwordKrom"] = (false, 2.8f, true);
         m.Weapons["BowDraugrFang"] = (true, 0f, true);
         m.Weapons["StaffShield"] = (false, 0f, false);
+        m.Weapons["StaffFireball"] = (true, 0f, true);
+        m.Weapons["Cultivator"] = (false, 2f, false);
+        m.Dots["StaffFireball"] = 60f;
         return m;
     }
 
@@ -377,7 +381,7 @@ static partial class CombatTests
             s.Core.Attack(5f, "Ragnar", "SwordIron");
             s.Core.Summon(6f, "2:5", "Skeleton_Friendly", "attack", "Astrid", Off(Here, 1.5f));
             s.Core.CreatureHealth(11f, "1:1", "Troll", Here, 520f, 510f, L(ragnar)); // a burn tick: nobody attacked in the window
-            check(Near(s.Get("dmg", "Ragnar", "Troll"), 10) && s.Sum("dmg", "Astrid") == 0,
+            check(s.Sum("dmg", "Astrid") == 0 && Near(s.Get("udmg", "", "Troll"), 10),
                 "summons guard: damage no attack explains (damage over time) never goes to a summon");
         }
         {
@@ -431,13 +435,100 @@ static partial class CombatTests
         {
             // the variant travels with the summon: totals under its kind, per variant in sdw / skw
             var s = New();
-            s.Core.Summon(332.5f, "1795:77", "Skeleton_Friendly", "attack", "M", Off(Here, 1.6f), "skeleton_sword2+ShieldWood");
+            s.Core.Summon(332.5f, "1795:77", "Skeleton_Friendly", "attack", "M", Off(Here, 1.6f), variant: "skeleton_sword2+ShieldWood");
             s.Core.CreatureHealth(333f, "1795:996", "Tick", Here, 50f, 0f, L());
             s.Core.Destroyed(333.3f, "1795:996", "Tick", false, Here, 0f, 50f, L(), L(M(Off(Here, 25))), by: Client);
             s.Core.Tick(340f, L(M(Off(Here, 25))));
             check(Near(s.Get("dw", "M", "Skeleton_Friendly>Tick"), 50) && Near(s.Get("sdw", "M", "Skeleton_Friendly:skeleton_sword2+ShieldWood>Tick"), 50)
                   && s.Get("skw", "M", "Skeleton_Friendly:skeleton_sword2+ShieldWood>Tick") == 1 && s.Get("wkill", "M", "Skeleton_Friendly") == 1,
                 "summons: by kind as the weapon, and by variant (what it holds) in sdw / skw");
+        }
+
+        // ======== damage: each drop by its cause ========
+        // a recorded fight: Leif's client runs Bonemass; Sigrid's hits are routed, Leif's are local
+        const long LeifClient = 931580, SigridClient = 229974;
+        PlayerState Fighter(string name, long client, float dx, string held) => new PlayerState(name, true, false, Off(Here, dx), held, client);
+        List<PlayerState> Both() => L(Fighter("Leif", LeifClient, 3, "THSwordKrom"), Fighter("Sigrid", SigridClient, -3, "SwordMistwalker"));
+        {
+            var s = New();
+            s.Core.Attack(8256.9f, "Sigrid", "SwordMistwalker");
+            s.Core.Attack(8257.2f, "Leif", "THSwordKrom");
+            s.Core.Hit(8257.48f, "9:1", "Sigrid", 186f, 15f);                      // slash + frost 186, spirit 15
+            s.Core.CreatureHealth(8257.51f, "9:1", "Bonemass", Here, 900f, 895.9f, Both(), LeifClient); // a spirit tick first
+            s.Core.CreatureHealth(8257.58f, "9:1", "Bonemass", Here, 895.9f, 765.4f, Both(), LeifClient); // the hit: 130.5 ≈ 0.7 × 186
+            check(Near(s.Get("dmg", "Sigrid", "Bonemass"), 130.5 + 4.1) || Near(s.Get("dmg", "Sigrid", "Bonemass"), 130.5),
+                "damage: a routed hit gets the drop that fits its size (0.7 × raw), not the tick that came first");
+            check(s.Get("dmg", "Leif", "Bonemass") < 4.2, "damage guard: the routed hit's drop never goes to the client's own player");
+        }
+        {
+            var s = New();
+            s.Core.Attack(10f, "Sigrid", "SwordMistwalker");
+            s.Core.Hit(10.2f, "9:2", "Sigrid", 186f, 20f);
+            s.Core.CreatureHealth(10.3f, "9:2", "Bonemass", Here, 900f, 770f, Both(), LeifClient);
+            s.Core.Attack(11f, "Leif", "THSwordKrom");
+            s.Core.CreatureHealth(11.4f, "9:2", "Bonemass", Here, 770f, 731f, Both(), LeifClient);  // Leif's 39: bigger than a spirit tick can be
+            s.Core.CreatureHealth(11.8f, "9:2", "Bonemass", Here, 731f, 727f, Both(), LeifClient);  // a spirit tick (≤ half of 20)
+            check(Near(s.Get("dmg", "Leif", "Bonemass"), 39) && Near(s.Get("dmg", "Sigrid", "Bonemass"), 134),
+                "damage: a fire / spirit / poison budget takes ticks only — never another player's hit");
+        }
+        {
+            var s = New();
+            s.Core.Attack(20f, "Sigrid", "SwordMistwalker"); // his hits would be routed: no routed hit, not his drop
+            s.Core.Attack(20.2f, "Leif", "THSwordKrom");
+            s.Core.CreatureHealth(20.6f, "9:3", "Bonemass", Here, 700f, 640f, Both(), LeifClient);
+            check(Near(s.Get("dmg", "Leif", "Bonemass"), 60) && s.Sum("dmg", "Sigrid") == 0,
+                "damage (group): a drop no routed hit explains is the creature's own client's player's — the other's swing didn't cause it");
+        }
+        {
+            var s = New();
+            s.Core.Attack(30f, "Leif", "Cultivator");
+            s.Core.CreatureHealth(30.4f, "9:4", "Boar", Here, 30f, 20f, L(Fighter("Leif", LeifClient, 2, "Cultivator")), LeifClient);
+            check(s.Sum("dmg", "Leif") == 0 && Near(s.Get("udmg", "", "Boar"), 10), "damage guard: a tool or a cast without damage never takes a share");
+        }
+        {
+            // a recorded fight: the skeletons' hits on Bonemass (Leif's client) are routed, with the skeleton as attacker
+            var s = New();
+            s.Core.Summon(40f, "7:77", "Skeleton_Friendly", "attack", "M", Off(Here, 1.5f), 1795);
+            s.Core.SummonHit(40.3f, "9:5", "M", "Skeleton_Friendly", 60f);
+            s.Core.CreatureHealth(40.4f, "9:5", "Bonemass", Here, 600f, 558f, Both(), LeifClient);
+            check(Near(s.Get("dw", "M", "Skeleton_Friendly>Bonemass"), 42) && s.Sum("dmg", "Leif") == 0,
+                "damage: a summon's routed hit — exact, for its player, under the summon");
+            s.Core.Summon(41f, "7:77", "Skeleton_Friendly", "attack", "M", Off(Here, 1.5f), 1795);
+            s.Core.Attack(41f, "Leif", "THSwordKrom");
+            s.Core.CreatureHealth(41.5f, "9:5", "Bonemass", Here, 558f, 500f, Both(), LeifClient);
+            check(Near(s.Get("dmg", "Leif", "Bonemass"), 58), "damage guard: a summon of another client takes no share of a local drop (its hits are routed)");
+        }
+        {
+            // solo: their own Staff of Embers; its burn ticks come 3–8 s later, without an attacker
+            var s = New();
+            var me = L(new PlayerState("M", true, false, Off(Here, 10), "StaffFireball", 1795));
+            s.Core.Attack(50f, "M", "StaffFireball");
+            s.Core.CreatureHealth(51f, "9:6", "Gjall", Here, 1500f, 1440f, me, 1795);
+            s.Core.CreatureHealth(55f, "9:6", "Gjall", Here, 1440f, 1427f, me, 1795);
+            check(Near(s.Get("dw", "M", "StaffFireball>Gjall"), 73) && s.Sum("udmg", "") == 0,
+                "damage (solo): a burn tick within 8 s of their own fire weapon is theirs, not unattributed");
+            s.Core.CreatureHealth(70f, "9:6", "Gjall", Here, 1427f, 1400f, me, 1795);
+            check(Near(s.Get("udmg", "", "Gjall"), 27), "damage: a drop nothing explains is unattributed, not anybody's");
+        }
+        {
+            // a recorded fight: the player died mid-fight and respawned far away; their skeletons kept hitting, and the game's
+            // kill note named them — the kill is under what they last damaged it with, not "Unarmed"
+            var s = New();
+            var alive = new PlayerState("M", true, false, Off(Here, 8), "StaffFireball", 1795);
+            s.Core.Attack(600f, "M", "StaffFireball");
+            s.Core.Hit(600.5f, "9:7", "M", 60f, 60f);
+            s.Core.CreatureHealth(600.6f, "9:7", "Bonemass", Here, 900f, 858f, L(alive), LeifClient);
+            s.Core.Attack(621f, "M", "StaffShield");                                   // a cast without damage, then death
+            s.Core.SummonHit(670f, "9:7", "M", "Skeleton_Friendly", 50f);
+            s.Core.CreatureHealth(670.1f, "9:7", "Bonemass", Here, 120f, 85f, L(new PlayerState("M", true, false, Off(Here, 900), null, 1795)), LeifClient);
+            var far = L(new PlayerState("M", true, false, Off(Here, 900), null, 1795));
+            s.Core.Destroyed(678f, "9:7", "Bonemass", false, Here, 38f, 5000f, far, far, by: LeifClient);
+            s.Core.KillNote(678f, LeifClient, "M", "$enemy_bonemass");
+            s.Core.Tick(690f, far);
+            check(s.Get("kill", "M", "Bonemass") == 1 && s.Get("wkill", "M", "Skeleton_Friendly") == 1 && s.Get("wkill", "M", "Unarmed") == 0,
+                "kills: under the weapon they last damaged it with (here their skeleton's, after their death)");
+            check(Near(s.Get("dw", "M", "StaffFireball>Bonemass"), 42) && s.Get("dw", "M", "StaffShield>Bonemass") == 0,
+                "damage: a routed hit after a cast without damage is the weapon before it, never the shield");
         }
     }
 }

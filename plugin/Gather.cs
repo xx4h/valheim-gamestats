@@ -108,7 +108,7 @@ namespace ValheimGamestats
 
         internal static void Add(string e, string p, string i, double n)
         {
-            if (string.IsNullOrEmpty(p) && e != "ukill") // ukill: a kill nobody could be credited with — no player by nature
+            if (string.IsNullOrEmpty(p) && e != "ukill" && e != "udmg") // a kill / damage nobody could be credited with: no player by nature
                 return;
             p ??= "";
             Counts.TryGetValue((e, p, i), out var have);

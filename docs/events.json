@@ -90,6 +90,15 @@
     "test_rebuild.Combat.test_unaccounted_kills_have_no_player"
    ]
   },
+  "udmg": {
+   "from": "CombatCore.cs",
+   "becomes": "gather",
+   "page": "Unaccounted kills (damage nobody could be credited with)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_rebuild.Combat.test_unattributed_damage_has_no_player"
+   ]
+  },
   "wkill": {
    "from": "CombatCore.cs",
    "becomes": "gather",

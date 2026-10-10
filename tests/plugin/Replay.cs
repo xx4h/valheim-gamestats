@@ -17,7 +17,7 @@ static class Replay
         var then = new Dictionary<(string, string, string), double>();
         void Add(Dictionary<(string, string, string), double> d, string e, string p, string i, double n)
         {
-            if (string.IsNullOrEmpty(p) && e != "ukill") // ukill: no player by nature
+            if (string.IsNullOrEmpty(p) && e != "ukill" && e != "udmg") // no player by nature
                 return;
             p ??= "";
             d.TryGetValue((e, p, i), out var have);
@@ -32,7 +32,15 @@ static class Replay
         var follows = new Dictionary<string, string>(); // a summon's uid → the player it follows
         foreach (var j in all.Where(j => S(j, "k") == "trig" && Has(j, "fol")))
             follows[S(j, "u")] = S(j, "fol");
+        Clients = clients;
         var weaponsSeen = new HashSet<string>(all.Where(j => S(j, "k") == "attack").Select(j => S(j, "w")));
+        // older traces: a creature's owner isn't on its health lines — the routed hits, deletions and owner changes tell
+        var owners = new Dictionary<string, long>();
+        foreach (var j in all)
+            if ((S(j, "k") == "hit" || S(j, "k") == "destroy") && Has(j, "own") && Has(j, "u"))
+                owners[S(j, "u")] = j.GetProperty("own").GetInt64();
+            else if (S(j, "k") == "owner" && Has(j, "now"))
+                owners[S(j, "u")] = j.GetProperty("now").GetInt64();
         var core = new CombatCore((e, p, i, n) => Add(now, e, p, i, n));
         Remaining.Clear();
         core.Died = (name, remaining) => Remaining[name] = Remaining.GetValueOrDefault(name) + remaining;
@@ -62,12 +70,16 @@ static class Replay
                         : clients.GetValueOrDefault(S(j, "from")), S(j, "to"), S(j, "kind"));
                     break;
                 case "hit":
-                    if (!(S(j, "am") ?? "").StartsWith("player:") && S(j, "att") is string att && follows.TryGetValue(att, out var fol))
-                        core.SummonHit(F(j, "t"), S(j, "u"), fol, Prefab(S(j, "am")), (float)j.GetProperty("d").EnumerateObject().Sum(d => d.Value.GetDouble()),
-                            holding.GetValueOrDefault(att));
+                {
+                    var d = j.GetProperty("d").EnumerateObject().ToList();
+                    var later = (float)d.Where(x => x.Name is "fire" or "spirit" or "poison").Sum(x => x.Value.GetDouble());
+                    var direct = (float)d.Sum(x => x.Value.GetDouble()) - later;
                     if (S(j, "am") is string am && am.StartsWith("player:"))
-                        core.Hit(F(j, "t"), S(j, "u"), am.Substring(7), (float)j.GetProperty("d").EnumerateObject().Sum(d => d.Value.GetDouble()));
+                        core.Hit(F(j, "t"), S(j, "u"), am.Substring(7), direct, later);
+                    else if (S(j, "att") is string att && follows.TryGetValue(att, out var fol))
+                        core.SummonHit(F(j, "t"), S(j, "u"), fol, Prefab(S(j, "am")), direct, later, holding.GetValueOrDefault(att));
                     break;
+                }
                 case "attack":
                     held = (F(j, "t"), S(j, "p"), S(j, "w"));
                     break;
@@ -75,7 +87,8 @@ static class Replay
                     if (Variant(j) is string v)
                         holding[S(j, "u")] = v;
                     if (Has(j, "tamed") && j.GetProperty("tamed").GetBoolean() && S(j, "fol") != null)
-                        core.Summon(F(j, "t"), S(j, "u"), Prefab(S(j, "m")), S(j, "tr"), S(j, "fol"), Pos(j), Variant(j));
+                        core.Summon(F(j, "t"), S(j, "u"), Prefab(S(j, "m")), S(j, "tr"), S(j, "fol"), Pos(j),
+                            Has(j, "own") ? j.GetProperty("own").GetInt64() : 0, Variant(j));
                     break;
                 case "drop":
                     core.Loot(F(j, "t"), S(j, "u"), S(j, "i"), long.Parse(S(j, "u").Split(':')[0]), Pos(j));
@@ -84,7 +97,8 @@ static class Replay
                     core.PlayerHealth(S(j, "p"), F(j, "b"), F(j, "a"), F(j, "mb"), F(j, "ma"), last);
                     break;
                 case "health":
-                    core.CreatureHealth(F(j, "t"), S(j, "u"), S(j, "m"), Pos(j), F(j, "b"), F(j, "a"), Players(j, "l"));
+                    core.CreatureHealth(F(j, "t"), S(j, "u"), S(j, "m"), Pos(j), F(j, "b"), F(j, "a"), Players(j, "l"),
+                        Has(j, "own") ? j.GetProperty("own").GetInt64() : owners.GetValueOrDefault(S(j, "u")));
                     break;
                 case "destroy":
                     core.Destroyed(F(j, "t"), S(j, "u"), S(j, "m"), j.GetProperty("tamed").GetBoolean(), Pos(j), N(j, "h"), N(j, "mh"),
@@ -220,6 +234,9 @@ static class Replay
     private static CombatMeta Meta(JsonElement j, HashSet<string> weaponsSeen)
     {
         var meta = new CombatMeta();
+        if (j.TryGetProperty("dots", out var dots))
+            foreach (var d in dots.EnumerateObject())
+                meta.Dots[d.Name] = (float)d.Value.GetDouble();
         if (j.TryGetProperty("names", out var names))
             foreach (var n in names.EnumerateObject())
                 meta.Names[n.Name] = n.Value.GetString();
@@ -275,5 +292,9 @@ static class Replay
 
     private static List<PlayerState> Players(JsonElement j, string k) =>
         j.GetProperty(k).EnumerateArray().Select(p => new PlayerState(S(p, "n"), p.GetProperty("b").GetBoolean(),
-            p.GetProperty("d").GetBoolean(), Pos(p), S(p, "h"))).ToList();
+            p.GetProperty("d").GetBoolean(), Pos(p), S(p, "h"),
+            Has(p, "c") ? p.GetProperty("c").GetInt64() : Clients.GetValueOrDefault(S(p, "n")))).ToList();
+
+    // older traces: a player's client from the deletions their client made (no "c" on players there)
+    private static Dictionary<string, long> Clients = new Dictionary<string, long>();
 }

@@ -3014,6 +3014,12 @@
     for (const g of rows) byKind.set(g[3], (byKind.get(g[3]) || 0) + g[4]);
     const kinds = new Set([...byKind.keys()].map((i) => gatherLabel(i).replace(/ ★\d+$/, '')));
     const last = rows.length ? Math.max(...rows.map((g) => g[0])) : null;
+    // damage no evidence ties to anyone (udmg), next to what was credited to players in the same range
+    const inRange = (S.data.gather || []).filter((g) => g[0] >= S.a && g[0] < S.b);
+    const udmg = new Map();
+    for (const g of inRange) if (g[2] === 'udmg') udmg.set(g[3], (udmg.get(g[3]) || 0) + g[4]);
+    const lost = [...udmg.values()].reduce((n, v) => n + v, 0);
+    const dealt = inRange.reduce((n, g) => n + (g[2] === 'dmg' ? g[4] : 0), 0);
     const list = rows.map((g) => ({ t: g[0], i: g[3], name: gatherLabel(g[3]), n: g[4], _search: `${gatherLabel(g[3])} ${g[3]}`.toLowerCase() }));
     const { table, search } = sortableTable([{ label: 'Hour', key: 't' }, { label: 'Creature', key: 'name' }, { label: 'Kills', key: 'n', r: true }],
       list, { key: 't', asc: false, q: '', limit: 100 }, (r) => el('tr', null,
@@ -3025,12 +3031,15 @@
       kpiRow(
         kpi('Unaccounted kills', nf(total), 'deaths nobody could be credited with'),
         kpi('Creature kinds', nf(kinds.size), byKind.size ? `mostly ${gatherLabel([...byKind].sort((x, y) => y[1] - x[1])[0][0])}` : null),
-        kpi('Last one', last != null ? fAgo(S.data.generated - last) : '–', last != null ? 'within that hour' : null)),
+        kpi('Last one', last != null ? fAgo(S.data.generated - last) : '–', last != null ? 'within that hour' : null),
+        kpi('Unattributed damage', nf(lost), lost + dealt > 0 ? `${fPct(lost / (lost + dealt))} of all damage dealt` : null)),
       el('div', { class: 'grid' },
         card('By creature', null, el('div', null,
           gatherBars(byKind, () => 'var(--ink-2)', 'No unaccounted kills in this range.', 20, 'creature'),
           el('p', { class: 'explain', text: UNACCOUNTED_TEXT })), 'span-6'),
-        card('All of them', 'per hour and creature', table, 'span-6', search)),
+        card('All of them', 'per hour and creature', table, 'span-6', search),
+        udmg.size ? card('Damage nobody could be credited with', 'health lost that no evidence ties to anyone',
+          gatherBars(udmg, () => 'var(--ink-2)', 'None in this range.', 20, 'creature'), 'span-12') : null),
     ];
   }
 
@@ -5290,7 +5299,7 @@
       { k: 'combat', label: 'Combat', href: d.fights?.length ? '#/bosses' : '#/deaths',
         pages: [d.fights?.length ? page('bosses', 'Boss fights', '#/bosses') : null, page('deaths', 'Deaths', '#/deaths'), page('raids', 'Raids', '#/raids'),
           d.gather?.length ? page('ranking', 'Rankings', '#/ranking/killers') : null,
-          d.gather?.some((g) => g[2] === 'ukill') ? page('unaccounted', 'Unaccounted kills', '#/unaccounted') : null].filter(Boolean) },
+          d.gather?.some((g) => g[2] === 'ukill' || g[2] === 'udmg') ? page('unaccounted', 'Unaccounted kills', '#/unaccounted') : null].filter(Boolean) },
       { k: 'world', label: 'World', href: '#/world',
         pages: [page('world', 'Map & exploration', '#/world'), d.world ? page('base', 'Base & gear', '#/base') : null,
           d.world ? page('items', 'Items', '#/items') : null, d.pets?.length ? page('pets', 'Pets', '#/pets') : null].filter(Boolean) },
