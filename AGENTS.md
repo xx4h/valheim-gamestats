@@ -28,6 +28,8 @@ tests/chart/check.sh
 cd plugin && dotnet build -c Release -warnaserror
 cd tests/plugin && dotnet run
 cd tests/plugin && dotnet run -- replay <trace.jsonl>   # a recorded session (plugin config Debug/Trace) through CombatCore
+cd tests/plugin && dotnet run -- expect                 # rewrite tests/combat/*.expected.json from CombatCore (after a rule change)
+python3 tools/combat_fixture.py <trace> <out.jsonl.gz> [from] [to]   # a recorded fight → an anonymised fixture for tests/combat
 ```
 
 - CI runs the collector tests on Python 3.12 (the oldest it supports) and 3.14 (its image), the latter with coverage —
@@ -43,6 +45,12 @@ cd tests/plugin && dotnet run -- replay <trace.jsonl>   # a recorded session (pl
 - On NixOS, run tools through nix: `nix run nixpkgs#python3 -- -m unittest …`, `nix shell nixpkgs#dotnet-sdk_8 -c …`.
 
 ## Rules
+
+- **The combat rules exist twice**: `plugin/CombatCore.cs` (the plugin's results) and `collector/valheim_gamestats/combat.py`
+  (the collector's, from the plugin's facts — what the page shows where facts exist). A rule change goes into both, line
+  for line, with `combat.RULES` bumped (the collector recomputes everything) and `tests/combat/*.expected.json`
+  rewritten (`dotnet run -- expect`); `tests/plugin` and `tests/collector/test_combat.py` both check them. New fixtures
+  come from `tools/combat_fixture.py`, with invented names — never a real player's.
 
 - **A new event or `data.json` key goes into [docs/events.json](docs/events.json) first**, with its tests.
   `test_contract.py` fails when the plugin sends an event that isn't listed, or an entry has no test about it;

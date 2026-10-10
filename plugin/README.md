@@ -213,8 +213,9 @@ creature's owner and the players' clients), `trig` (a summon's attack, with what
 creature), `killnote`, `destroy`, `ragdoll`, `drop` (a new item some creature drops, made by a client), and once per
 start the prefabs' facts as `meta0` and parts `meta` (`s`: the section, `d`: its entries; each part fits one store
 reply). No ticks, no food lines, no results — about 5,000 a busy day. They're for the collector's own combat rules,
-which recompute the results from them (retroactively when a rule changes); until those exist, the collector stores
-them and sums nothing from them.
+which recompute the results from them (`collector/valheim_gamestats/combat.py`, a port of these rules pinned to the
+same expected sums on recorded fights in `tests/combat/`): in a plugin run with facts, the collector's results replace
+the plugin's, retroactively whenever a rule changes.
 
 Tamed creatures are not combat (since 1.8.0): hitting or butchering a pet counts
 as neither damage dealt nor a kill. `Pets.cs` logs the death of every tamed creature (one `petdeath` line, not
