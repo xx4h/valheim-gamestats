@@ -288,3 +288,27 @@ test('a long server name wraps, then ends in …', async ({ page }, info) => {
   await page.evaluate(() => { document.getElementById('title').textContent = 'My Valheim'; });
   expect(await t.evaluate((n) => Math.round(n.clientHeight / parseFloat(getComputedStyle(n).lineHeight)))).toBe(1);
 });
+
+test('unaccounted kills: their own page, never a player', async ({ page }) => {
+  const errors = watch(page);
+  let added = false;
+  await page.route('**/c/*', async (route) => {  // the plugin's `ukill` rows have no player
+    const body = await (await route.fetch()).json();
+    if (!added && Array.isArray(body.gather) && body.gather.length) {
+      added = true;
+      const t = Math.max(...body.gather.map((g) => g[0]));
+      body.gather.push([t, '', 'ukill', 'Tick', 2], [t, '', 'ukill', 'Goblin/GoblinArcher*1', 1], [t - 3600, '', 'ukill', 'Dverger', 1]);
+    }
+    await route.fulfill({ json: body });
+  });
+  await start(page, '#/unaccounted');
+  await expect(page.getByRole('heading', { name: 'Unaccounted kills' }).first()).toBeVisible();
+  await expect(page.locator('.kpis').first()).toContainText('deaths nobody could be credited with');
+  await expect(page.locator('.kpis .kpi').first()).toContainText('4');
+  await expect(page.getByText(/ or /).first()).toBeVisible();  // a shared ragdoll: every kind it can be
+  await expect(page.locator('a[href^="#/creature/Tick"]').first()).toBeVisible();
+  await expect(page.locator('a[href^="#/p/"]').filter({ hasText: /^$/ })).toHaveCount(0);  // no empty player anywhere
+  await open(page, '#/');
+  await expect(page.locator('#sidenav a[href="#/unaccounted"], nav a[href="#/unaccounted"]').first()).toBeAttached();
+  expect(errors).toEqual([]);
+});

@@ -17,12 +17,15 @@ static class Replay
         var then = new Dictionary<(string, string, string), double>();
         void Add(Dictionary<(string, string, string), double> d, string e, string p, string i, double n)
         {
-            if (string.IsNullOrEmpty(p))
+            if (string.IsNullOrEmpty(p) && e != "ukill") // ukill: no player by nature
                 return;
+            p ??= "";
             d.TryGetValue((e, p, i), out var have);
             d[(e, p, i)] = have + n;
         }
         var core = new CombatCore((e, p, i, n) => Add(now, e, p, i, n));
+        Remaining.Clear();
+        core.Died = (name, remaining) => Remaining[name] = Remaining.GetValueOrDefault(name) + remaining;
         // an attack line is followed by its trigger line (the animation, for health costs): hold it one line
         (float T, string P, string W)? held = null;
         var last = 0f; // the latest time seen: player lines of older traces have none
@@ -135,13 +138,25 @@ static class Replay
         foreach (var ((e, p, i), n) in now)
             if (e == "kill" && n > deaths.GetValueOrDefault(i) + 1e-6)
                 violations.Add($"I3: {p} has {n} kills of {i}, the trace has {deaths.GetValueOrDefault(i)} deaths");
+        foreach (var kind in now.Keys.Where(k => k.Item1 == "ukill").Select(k => k.Item3).Distinct())
+        {
+            var unaccounted = now[("ukill", "", kind)];
+            var credited = now.Where(x => x.Key.Item1 == "kill" && x.Key.Item3 == kind).Select(x => x.Value).DefaultIfEmpty(0).Max();
+            if (unaccounted + credited > deaths.GetValueOrDefault(kind) + 1e-6 && !kind.Contains('/'))
+                violations.Add($"I3: {kind}: {unaccounted} unaccounted + {credited} credited kills, the trace has {deaths.GetValueOrDefault(kind)} deaths");
+        }
+        foreach (var kv in Remaining)
+            lost[kv.Key] = lost.GetValueOrDefault(kv.Key) + kv.Value;
         var coverage = lost.OrderByDescending(kv => kv.Value).Select(kv =>
         {
             var credited = now.Where(x => x.Key.Item1 == "dmg" && x.Key.Item3 == kv.Key).Sum(x => x.Value);
-            return $"{kv.Key}: lost {kv.Value:0}, credited to players {credited:0} ({(kv.Value > 0 ? credited / kv.Value : 1):P0})";
+            return $"{kv.Key}: lost {kv.Value:0} (synced drops + health left at counted deaths), credited to players {credited:0} ({(kv.Value > 0 ? credited / kv.Value : 1):P0})";
         }).ToList();
         return (violations, coverage);
     }
+
+    // of the last Run: per creature name, the health its counted deaths still had (never synced as drops)
+    internal static readonly Dictionary<string, double> Remaining = new Dictionary<string, double>();
 
     private static bool Has(JsonElement j, string k) => j.TryGetProperty(k, out var v) && v.ValueKind != JsonValueKind.Null;
 
@@ -157,6 +172,9 @@ static class Replay
         if (j.TryGetProperty("drops", out var drops) && drops.ValueKind == JsonValueKind.Object)
             foreach (var d in drops.EnumerateObject())
                 meta.Drops[d.Name] = d.Value.EnumerateObject().ToDictionary(i => i.Name, i => (float)i.Value.GetDouble());
+        if (j.TryGetProperty("noragdoll", out var none))
+            foreach (var n in none.EnumerateArray())
+                meta.NoRagdoll.Add(n.GetString());
         if (j.TryGetProperty("timed", out var timed))
             foreach (var t in timed.EnumerateArray())
                 meta.Timed.Add(t.GetString());

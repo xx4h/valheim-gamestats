@@ -83,6 +83,7 @@ namespace ValheimGamestats
                     if (attack != null && (attack.m_attackHealth > 0f || attack.m_attackHealthPercentage > 0f))
                         meta.Costs[go.name + "/" + attack.m_attackAnimation] = (attack.m_attackHealth, attack.m_attackHealthPercentage);
             }
+            meta.NoRagdoll.UnionWith(noRagdoll);
             if (CombatTrace.Enabled && !_meta)
                 CombatTrace.Meta(noRagdoll, meta);
             _meta = true;

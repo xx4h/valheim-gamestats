@@ -129,6 +129,15 @@ class Combat(unittest.TestCase):
         log = Log().g(120, e="kw", p="Ragnar", i="MaceIron>Troll*1", n=1).g(180, e="kw", p="Ragnar", i="MaceIron>Troll*1", n=1)
         self.assertEqual([r for r in rebuild(log)["gather"] if r[2] == "kw"][0][3:], ["MaceIron>Troll*1", 2])
 
+    def test_unaccounted_kills_have_no_player(self):
+        # a death the plugin couldn't credit to anyone: summed per creature, never a player's kill
+        log = Log().g(120, e="ukill", p="", i="Tick", n=1).g(180, e="ukill", p="", i="Tick", n=2)
+        log.g(190, e="ukill", p="", i="Goblin/GoblinArcher*1", n=1)
+        data = rebuild(log)
+        got = sorted((r[1], r[3], r[4]) for r in data["gather"] if r[2] == "ukill")
+        self.assertEqual(got, [("", "Goblin/GoblinArcher*1", 1), ("", "Tick", 3)])
+        self.assertEqual(gather(data, "kill"), 0)
+
     def test_damage_taken_summed(self):
         log = Log().g(120, e="taken", p="Ragnar", i="", n=40).g(180, e="taken", p="Ragnar", i="", n=35)
         self.assertEqual(gather(rebuild(log), "taken", "Ragnar"), 75)

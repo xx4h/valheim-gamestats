@@ -41,10 +41,34 @@ the collector credits exactly whom the plugin's line names, no one more, and
 | Stat | Credited to | Source |
 |---|---|---|
 | Damage dealt | players in the mob's attacker list who attacked within 3 s before the health drop, alive and within 60 m; one share per attack, else split evenly | plugin |
-| Kill | every attacker of a mob that died with health ≤ 0 (alive, within 60 m); a one-hit kill seen only as a ragdoll: its known attackers, else the nearest player within 15 m | plugin |
+| Kill | every attacker of a mob that died with health ≤ 0 (alive, within 60 m); a one-hit kill seen only as a ragdoll **of its own kind**: its known attackers; a creature without a ragdoll (Seekers, Ticks, Blobs, bosses …) deleted with health left: a kill when its own loot (its drop table, created by the client that deleted it, within 3 m and 2 s) appears — not for creatures deleted on a timer (enemy summons) | plugin |
 | Damage / hits taken | the player whose health dropped (not a drop to a new, lower max health: food wearing off; not the cost of their own blood magic) | plugin |
 | Health paid | the player whose own health-cost attack (Dead Raiser, Staff of Protection, Trollstav …) took it: the drop right after its trigger, from a third less (blood magic skill) up to the full cost; a hit in the same sync is the rest, as damage taken | plugin |
 | Pet killed | never a kill or damage dealt; recorded as the pet's death | plugin ≥ 1.8.0 |
+| Unaccounted kill | nobody: a death (health 0, its own ragdoll or its own loot) with no evidence for its killer — see below | plugin |
+
+### Unaccounted kills
+
+A kill is only ever credited on evidence: a player on the creature's attacker list who was alive and within 60 m. A
+death the server saw (health 0, a ragdoll of its kind,
+or its own loot) with none of that is **not** given to whoever happened to be nearby. It is counted as an unaccounted
+kill instead — event `ukill`, no player, the creature as the object — and shown on the page **Combat → Unaccounted
+kills** (how many, which creatures, when).
+
+Typical causes: traps, turrets and the environment; creatures fighting each other (Dvergers and Seekers in the
+Mistlands); a one-hit kill whose last update never reached the server, so its attacker list never showed the player; a
+ragdoll whose deletion never arrived (then the creature is named by every kind that ragdoll can belong to, e.g.
+`Goblin/GoblinArcher`).
+
+To investigate one:
+1. The server log has a line per unaccounted kill, always (not only with `[Debug] Diag`):
+   `[Gamestats-unaccounted] Tick signal=loot list=empty at 151,-7642 nearest player within 60 m: Ragnar` —
+   `signal` is what said it died, `list` its attacker list as it was (players marked `(dead)` or `(no character)` were
+   on it but didn't count).
+2. For the full picture, turn on `[Debug] Trace` in `BepInEx/config/valheim.gamestats.cfg` and restart; the plugin
+   writes everything the combat rules see to `BepInEx/gamestats/trace/<UTC day>.jsonl`. Replay it with
+   `cd tests/plugin && dotnet run -- replay <trace>`: it shows what the rules make of the session, checks the
+   invariants (no credit without evidence, each death once) and prints the coverage per creature.
 
 ### Checks
 

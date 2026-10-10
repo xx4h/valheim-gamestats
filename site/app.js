@@ -3000,6 +3000,39 @@
     ];
   }
 
+  // ---- unaccounted kills: deaths the plugin saw but couldn't credit to anyone (no guessing from who was near)
+  const UNACCOUNTED_TEXT = 'A creature died, but nothing said who killed it: no player on its attacker list who was alive and near, '
+    + 'and no summon of anyone in reach just before. Typical causes: traps, turrets, the environment, creatures fighting each other, '
+    + 'or a one-hit kill whose last update never reached the server. These are never credited to whoever happened to be nearby. '
+    + 'Each one is in the server log as a "[Gamestats-unaccounted]" line with what was known; to investigate, turn on '
+    + '[Debug] Trace in the plugin config and replay the trace (docs/ATTRIBUTION.md, "Unaccounted kills").';
+  function unaccountedView() {
+    const rows = (S.data.gather || []).filter((g) => g[2] === 'ukill' && g[0] >= S.a && g[0] < S.b);
+    const total = rows.reduce((n, g) => n + g[4], 0);
+    const byKind = new Map();
+    for (const g of rows) byKind.set(g[3], (byKind.get(g[3]) || 0) + g[4]);
+    const kinds = new Set([...byKind.keys()].map((i) => gatherLabel(i).replace(/ ★\d+$/, '')));
+    const last = rows.length ? Math.max(...rows.map((g) => g[0])) : null;
+    const list = rows.map((g) => ({ t: g[0], i: g[3], name: gatherLabel(g[3]), n: g[4], _search: `${gatherLabel(g[3])} ${g[3]}`.toLowerCase() }));
+    const { table, search } = sortableTable([{ label: 'Hour', key: 't' }, { label: 'Creature', key: 'name' }, { label: 'Kills', key: 'n', r: true }],
+      list, { key: 't', asc: false, q: '', limit: 100 }, (r) => el('tr', null,
+        el('td', { text: fDateTime(r.t) }),
+        el('td', null, r.i.includes('/') ? el('span', { text: r.name }) : el('a', { class: 'plain', href: creatureHref(r.i), text: r.name })),
+        el('td', { class: 'r', text: nf(r.n) })), 'No unaccounted kills in this range.');
+    return [
+      ...subHead('Unaccounted kills', plural(total, 'kill')),
+      kpiRow(
+        kpi('Unaccounted kills', nf(total), 'deaths nobody could be credited with'),
+        kpi('Creature kinds', nf(kinds.size), byKind.size ? `mostly ${gatherLabel([...byKind].sort((x, y) => y[1] - x[1])[0][0])}` : null),
+        kpi('Last one', last != null ? fAgo(S.data.generated - last) : '–', last != null ? 'within that hour' : null)),
+      el('div', { class: 'grid' },
+        card('By creature', null, el('div', null,
+          gatherBars(byKind, () => 'var(--ink-2)', 'No unaccounted kills in this range.', 20, 'creature'),
+          el('p', { class: 'explain', text: UNACCOUNTED_TEXT })), 'span-6'),
+        card('All of them', 'per hour and creature', table, 'span-6', search)),
+    ];
+  }
+
   function worldView(r) {
     const wst = mapState('world');
     wst.line = worldLineFromLink(r?.q);
@@ -3115,7 +3148,9 @@
   };
   const gatherLabel = (i) => {
     const [base, stars] = i.split('*');
-    const name = CD()[base]?.name || CREATURE_NAMES[base] || itemName(base);
+    // "Goblin/GoblinArcher": a death known only by a ragdoll several kinds share — every kind it can be
+    const one = (b) => CD()[b]?.name || CREATURE_NAMES[b] || itemName(b);
+    const name = base.includes('/') ? base.split('/').map(one).join(' or ') : one(base);
     return stars ? `${name} ★${stars}` : name;
   };
   // Sum the per-object breakdowns of some plugin stats over several players.
@@ -5013,7 +5048,7 @@
   }
 
   const fightTitle = (id) => { const f = (S.data.fights || []).find((x) => x.id === id); return f ? `${fightName(f)} · ${fDate(f.s)}` : 'Boss fight'; };
-  const VIEWS = { sessions: sessionsView, deaths: deathsView, raids: raidsView, world: worldView, base: baseView, items: itemsView, item: itemView, creature: creatureView, server: serverView, achievements: achievementsView, bosses: bossesView, fight: fightView, ranking: rankingView, pets: petsView, pet: petView, search: searchView, scoring: scoringView };
+  const VIEWS = { sessions: sessionsView, deaths: deathsView, raids: raidsView, unaccounted: unaccountedView, world: worldView, base: baseView, items: itemsView, item: itemView, creature: creatureView, server: serverView, achievements: achievementsView, bosses: bossesView, fight: fightView, ranking: rankingView, pets: petsView, pet: petView, search: searchView, scoring: scoringView };
   // ------------------------------------------------------------------ how scoring works (#/scoring)
   // The rules this server's page and Discord feed compute from (data.scoring: scoring.json with the server's overrides),
   // with what the server changed marked. docs/SCORING.md is the same for server owners, with how to change it.
@@ -5104,7 +5139,7 @@
       el('div', { class: 'grid', style: { marginTop: '14px' } }, out)];
   }
 
-  const VIEW_TITLE = { sessions: 'Sessions', deaths: 'Deaths', raids: 'Raids', world: 'World', base: 'Base & gear', items: 'Items', item: 'Item', server: 'Server', achievements: 'Achievements', bosses: 'Boss fights', pets: 'Pets', search: 'Search', scoring: 'How scoring works' };
+  const VIEW_TITLE = { sessions: 'Sessions', deaths: 'Deaths', raids: 'Raids', unaccounted: 'Unaccounted kills', world: 'World', base: 'Base & gear', items: 'Items', item: 'Item', server: 'Server', achievements: 'Achievements', bosses: 'Boss fights', pets: 'Pets', search: 'Search', scoring: 'How scoring works' };
 
   // ------------------------------------------------------------------ routing / range
 
@@ -5135,7 +5170,7 @@
     if (m) return { view: 'pet', arg: decodeURIComponent(m[1]) };
     m = hash.match(/^#\/ranking\/(\w+)$/);
     if (m) return { view: 'ranking', arg: m[1] };
-    m = hash.match(/^#\/(sessions|deaths|raids|world|base|items|server|achievements|bosses|pets|search|scoring)(?:\?(.*))?$/);
+    m = hash.match(/^#\/(sessions|deaths|raids|unaccounted|world|base|items|server|achievements|bosses|pets|search|scoring)(?:\?(.*))?$/);
     if (m) return { view: m[1], q: new URLSearchParams(m[2] || '') };
     return {};
   }
@@ -5229,7 +5264,8 @@
         pages: [page('leaderboard', 'Leaderboard', '#/?card=leaderboard'), page('sessions', 'Sessions', '#/sessions'), page('scoring', 'Scoring', '#/scoring')] },
       { k: 'combat', label: 'Combat', href: d.fights?.length ? '#/bosses' : '#/deaths',
         pages: [d.fights?.length ? page('bosses', 'Boss fights', '#/bosses') : null, page('deaths', 'Deaths', '#/deaths'), page('raids', 'Raids', '#/raids'),
-          d.gather?.length ? page('ranking', 'Rankings', '#/ranking/killers') : null].filter(Boolean) },
+          d.gather?.length ? page('ranking', 'Rankings', '#/ranking/killers') : null,
+          d.gather?.some((g) => g[2] === 'ukill') ? page('unaccounted', 'Unaccounted kills', '#/unaccounted') : null].filter(Boolean) },
       { k: 'world', label: 'World', href: '#/world',
         pages: [page('world', 'Map & exploration', '#/world'), d.world ? page('base', 'Base & gear', '#/base') : null,
           d.world ? page('items', 'Items', '#/items') : null, d.pets?.length ? page('pets', 'Pets', '#/pets') : null].filter(Boolean) },
@@ -5244,7 +5280,7 @@
       case undefined: return { g: 'overview', k: 'overview' };
       case 'sessions': case 'scoring': return { g: 'players', k: r.view };
       case 'bosses': case 'fight': return { g: 'combat', k: 'bosses' };
-      case 'deaths': case 'raids': return { g: 'combat', k: r.view };
+      case 'deaths': case 'raids': case 'unaccounted': return { g: 'combat', k: r.view };
       case 'ranking': return { g: 'combat', k: 'ranking' };
       case 'creature': return { g: 'combat', k: null };
       case 'item': return { g: 'world', k: 'items' };
@@ -5611,7 +5647,7 @@
   // for, so a key means the same on every server. A new entry goes in at its importance; the ones after it may move.
   const GO_ORDER = [['overview', 'Overview'], ['players:group', 'Players'], ['leaderboard', 'Leaderboard'], ['combat:group', 'Combat'],
     ['world:group', 'World'], ['deaths', 'Deaths'], ['sessions', 'Sessions'], ['world', 'Map & exploration'], ['raids', 'Raids'],
-    ['bosses', 'Boss fights'], ['base', 'Base & gear'], ['items', 'Items'], ['server', 'Server'], ['achievements', 'Achievements'],
+    ['bosses', 'Boss fights'], ['unaccounted', 'Unaccounted kills'], ['base', 'Base & gear'], ['items', 'Items'], ['server', 'Server'], ['achievements', 'Achievements'],
     ['ranking', 'Rankings'], ['pets', 'Pets'], ['scoring', 'Scoring']];
   const GO = (() => {
     const used = new Set();
@@ -5642,6 +5678,7 @@
     bosses: 'Every boss fight: who fought, how long it took, damage per player.',
     deaths: 'Who died, how often, when — and what it cost in skills.',
     raids: 'Attacks on the base: which kind, when, and who was there.',
+    unaccounted: 'Deaths the server saw but could not credit to anyone — never guessed from who was near.',
     ranking: 'Full lists behind the overview’s top 10s.',
     world: 'The explored map, biomes, in-game days and who discovered what.',
     base: 'Everything built, stored, crafted and tamed, from the last world save.',
