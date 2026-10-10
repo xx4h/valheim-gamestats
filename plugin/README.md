@@ -160,9 +160,11 @@ mob's loss is damage dealt by the players in its attacker list
 (`ZDOVars.s_attackers` + name) who are alive and within 60 m. Which of them
 gets how much comes from `Attacks.cs`: every attack starts with an animation
 trigger that passes through the server, matched against the attack animations
-of what the player holds. A health drop is split per attack in the 3 s before
-it, with that attack's weapon; with no attack in that window (damage over time),
-evenly, with each player's last attack weapon. Summons and commanded tames
+of what the player holds. A health drop goes to its cause: a routed hit
+just before it (a player's or a summon's: exact), the fire / spirit / poison
+ticks of such a hit (from its budget), else the client that runs the creature —
+its player's damaging attacks in the 3 s before it and its summons' in reach;
+nothing of that is `udmg`, unattributed (docs/ATTRIBUTION.md). Summons and commanded tames
 never get on the attacker list; their attack triggers (with their follow
 target) count for that player, under the summon's name, when the summon was in
 reach of the mob (one creature per attack), and a summon's hit in the 10 s

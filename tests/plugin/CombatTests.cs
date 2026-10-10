@@ -57,8 +57,8 @@ static partial class CombatTests
             var s = new Sim();
             s.Core.Attack(1f, "Ragnar", "AxeBronze"); // 10 s before: outside the window, but their last weapon
             s.Core.CreatureHealth(11f, "1:1", "Boar", Here, 30f, 20f, L(P("Ragnar", At(1)), P("Astrid", At(1), held: "Club")));
-            check(Near(s.Get("dw", "Ragnar", "AxeBronze>Boar"), 5) && Near(s.Get("dw", "Astrid", "Club>Boar"), 5),
-                "damage: no attack in the window — evenly, with the last attack's weapon, else what they hold");
+            check(s.Sum("dmg", "Ragnar") == 0 && s.Sum("dmg", "Astrid") == 0 && Near(s.Get("udmg", "", "Boar"), 10),
+                "damage: no attack in the window and nothing else that explains it — unattributed, never spread over the list");
         }
         {
             var s = new Sim();
@@ -81,8 +81,8 @@ static partial class CombatTests
             s.Core.Attack(10f, "Ragnar", "StaffFireball");
             s.Core.CreatureHealth(11f, "1:1", "Troll", Here, 600f, 480f, L(P("Ragnar", At(1)), P("Astrid", At(1))));
             s.Core.CreatureHealth(16f, "1:1", "Troll", Here, 480f, 460f, L(P("Ragnar", At(1)), P("Astrid", At(1))));
-            check(Near(s.Get("dmg", "Astrid", "Troll"), 10),
-                "known gap (damage over time): a burn tick after the window is split over everyone on the list ");
+            check(s.Sum("dmg", "Astrid") == 0 && Near(s.Get("udmg", "", "Troll"), 20),
+                "damage over time: a burn tick after the window, with the weapon's fire unknown — unattributed, not split over the list");
         }
 
         // ---- kills
