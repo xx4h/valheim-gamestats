@@ -28,6 +28,10 @@ def server(length, meta=True, deaths=()):
     return lines
 
 
+def plan(lines, starts, deaths, day):
+    return trace_import.plan(trace_import.scan(lambda: iter(lines)), starts, deaths, day)
+
+
 class Facts(unittest.TestCase):
     def test_what_the_facts_keep(self):
         lines = [
@@ -79,38 +83,61 @@ class Facts(unittest.TestCase):
         self.assertEqual(sum(len(p["d"]) for p in parts), 200)
 
 
+class Read(unittest.TestCase):
+    def test_the_file_per_server_start(self):
+        lines = server(40) + [{"k": "out", "e": "dmg", "p": "Ragnar", "i": "Neck", "n": 5}] + server(35, meta=False)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "2026-03-14.jsonl")
+            with open(path, "w") as f:
+                f.writelines(json.dumps(x, separators=(",", ":")) + "\n" for x in lines)  # as the plugin writes them
+                f.write("\n")
+            got = trace_import.scan(lambda: trace_import.read(path))
+            self.assertEqual([(s.n, s.length, s.meta) for s in got], [(0, 40.0, True), (1, 35.0, False)])
+            first = list(got[0])
+            self.assertEqual(len(first), 12)  # 11 ticks and the prefab facts; the result line not read at all
+            self.assertTrue(all(x["k"] != "out" for x in first))
+            self.assertEqual(len(list(got[1])), 6)
+            self.assertEqual(list(got[1]), list(got[1]))  # read again, the same
+
+    def test_facts_from_a_server_like_from_its_lines(self):
+        lines = server(50, deaths=[("Astrid", 45)]) + [{"k": "attack", "t": 49.0, "p": "Astrid", "w": "Club"}]
+        got = trace_import.scan(lambda: iter(lines))
+        self.assertEqual(got[0].deaths, [("Astrid", 45.0)])
+        self.assertEqual(trace_import.facts(got[0]), trace_import.facts(lines))
+
+
 class Plan(unittest.TestCase):
     def test_server_starts_by_their_length(self):
         starts = [BEGIN - 3600, BEGIN + 3600, BEGIN + 3600 + 1000, BEGIN + 3600 + 1000 + 2200]
         lines = server(1000 - 31) + server(2200 - 31) + server(500)  # the file's first began at the day's start
-        rows = trace_import.plan(lines, starts, [], DAY)
+        rows = plan(lines, starts, [], DAY)
         self.assertEqual([r[0] for r in rows], starts[1:])
         self.assertEqual({round(r[1] - r[0], 1) for r in rows}, {trace_import.OFFSET})
 
     def test_the_run_before_the_day(self):
         starts = [BEGIN - 600, BEGIN + 3600]
-        rows = trace_import.plan(server(4200 - 31) + server(300), starts, [], DAY)
+        rows = plan(server(4200 - 31) + server(300), starts, [], DAY)
         self.assertEqual([r[0] for r in rows], starts)
 
     def test_clock_by_the_deaths(self):
         start = BEGIN + 3600
         deaths = [("Astrid", start + 33.5 + 400), ("Bjorn", start + 33.5 + 900), ("Leif", start + 500)]
-        rows = trace_import.plan(server(1000, deaths=[("Astrid", 400), ("Bjorn", 900)]), [start], deaths, DAY)
+        rows = plan(server(1000, deaths=[("Astrid", 400), ("Bjorn", 900)]), [start], deaths, DAY)
         self.assertAlmostEqual(rows[0][1] - start, 33.5)
         self.assertEqual(rows[0][2], "2 deaths")
 
     def test_without_deaths_the_others_offset(self):
         starts = [BEGIN + 100, BEGIN + 100 + 2000]
         deaths = [("Astrid", starts[1] + 32.0 + 600)]
-        rows = trace_import.plan(server(2000 - 31) + server(1000, deaths=[("Astrid", 600)]), starts, deaths, DAY)
+        rows = plan(server(2000 - 31) + server(1000, deaths=[("Astrid", 600)]), starts, deaths, DAY)
         self.assertAlmostEqual(rows[0][1] - starts[0], 32.0)
         self.assertIn("no death", rows[0][2])
 
     def test_refused_when_nothing_fits(self):
         with self.assertRaises(ValueError):
-            trace_import.plan(server(100) + server(100), [BEGIN + 10], [], DAY)
+            plan(server(100) + server(100), [BEGIN + 10], [], DAY)
         with self.assertRaises(ValueError):
-            trace_import.plan(server(100) + server(100), [BEGIN + 10, BEGIN + 5000, BEGIN + 9000], [], DAY)
+            plan(server(100) + server(100), [BEGIN + 10, BEGIN + 5000, BEGIN + 9000], [], DAY)
 
 
 class Run(unittest.TestCase):
