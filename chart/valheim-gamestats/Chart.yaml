@@ -3,5 +3,5 @@ name: valheim-gamestats
 description: Stats pages for Valheim dedicated servers — sessions, deaths, combat, exploration, the world save — from the server log, its world save and a BepInEx plugin.
 type: application
 # One version for chart, images and plugin: CI tags a release vX.Y.Z when this changes on main and everything passed.
-version: 1.20.11
-appVersion: "1.20.11"
+version: 1.21.0
+appVersion: "1.21.0"
