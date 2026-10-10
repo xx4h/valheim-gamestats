@@ -78,7 +78,10 @@ once a minute. Per server:
    dealt and taken, kills, health paid, unaccounted kills and damage, summons — come from the collector's own rules
    (a port of the plugin's `CombatCore.cs`, pinned to the same expected sums on recorded fights in `tests/combat/`),
    replacing what the plugin sent for that run. A rule change (`combat.RULES`) recomputes every run with facts;
-   runs whose facts didn't change come from `<server>/combat.json`. Older runs, without facts, keep the plugin's results.
+   runs whose facts didn't change come from `<server>/combat.json`. Older runs, without facts, keep the plugin's results
+   — unless a `[Debug] Trace` recorded them: `python3 -m valheim_gamestats.trace_import <data>/<server>
+   <trace.jsonl> [--write]` turns a trace into the facts the plugin would have stored (on the store's clock, by the
+   players' deaths in both) for the runs that have none, and the next rebuild recomputes those runs too.
 6. **Rebuild**: all events, oldest first, into sessions, deaths, raids, zones, gathering per hour, boss fights
    (`fights.py`), pets (`pets.py`), peaks, feats, dungeon visits, gear moves — plus the world, RCON and Steam parts —
    into one JSON document, called `data.json` throughout (never written as one file since 1.20.4).
