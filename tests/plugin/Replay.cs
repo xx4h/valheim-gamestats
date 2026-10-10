@@ -93,6 +93,8 @@ static class Replay
             }
         }
         Flush(null);
+        // the trace ends: deaths still waiting for their credit (3 s) or their ragdoll get it now, as a running server would
+        core.Tick(last + 2 * CombatCore.MatchSeconds + 2 * CombatCore.SettleSeconds, new List<PlayerState>());
         return (now, then);
     }
 

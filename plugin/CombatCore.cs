@@ -67,7 +67,7 @@ namespace ValheimGamestats
         internal const float MatchSeconds = 6f;
         internal const float SettleSeconds = 3f;  // let the deletion of a ragdoll's mob arrive first
         internal const float Keep = 30f;          // seconds of attack history per player
-        internal const float LootRange = 3f;      // a corpse-less death's loot drops at its centre
+        internal const float LootRange = 3f;      // a corpse-less death's loot drops at its centre: horizontally (a boss's is metres up)
         internal const float LootSeconds = 2f;    // … in the same frame as the death; its deletion and the item arrive close together
         internal const float HurtSeconds = 10f;
         internal const float NoteSeconds = 3f;    // a kill note and its creature's deletion: sent in the same frame, routed apart
@@ -356,6 +356,12 @@ namespace ValheimGamestats
                 match.Counted = true;
             }
             foreach (var d in _deaths)
+                if (!d.Counted && !d.Decided && d.Signal == null && Noted(d, consume: false).Count > 0)
+                {
+                    d.Signal = "kill note"; // the game itself says it died (and its ragdoll, if any, finds it counted)
+                    d.Counted = true;
+                }
+            foreach (var d in _deaths)
                 if (!d.Counted && !d.Decided && now - d.Time >= SettleSeconds && Corpseless(d.Kind))
                     Settle(d, now);
             foreach (var d in _deaths)
@@ -380,7 +386,7 @@ namespace ValheimGamestats
         {
             d.Decided = true;
             if (!_meta.Timed.Contains(d.Kind) && _meta.Drops.TryGetValue(d.Kind, out var table) && d.By != 0
-                && _loot.Exists(l => l.By == d.By && table.ContainsKey(l.Item) && Vec.Distance(l.Pos, d.Pos) <= LootRange
+                && _loot.Exists(l => l.By == d.By && table.ContainsKey(l.Item) && Flat(l.Pos, d.Pos) <= LootRange
                                      && l.Time - d.Time >= -LootSeconds / 2 && l.Time - d.Time <= LootSeconds))
             {
                 d.Signal = "loot";
@@ -417,7 +423,7 @@ namespace ValheimGamestats
         }
 
         // The players the game's kill notes name for this death: from the client that deleted it, of its kind, at the time.
-        private List<string> Noted(Death d)
+        private List<string> Noted(Death d, bool consume = true)
         {
             var names = new List<string>();
             for (var i = _notes.Count - 1; i >= 0; i--)
@@ -427,10 +433,17 @@ namespace ValheimGamestats
                 {
                     if (!names.Contains(n.To))
                         names.Add(n.To);
-                    _notes.RemoveAt(i); // a note credits one death
+                    if (consume)
+                        _notes.RemoveAt(i); // a note credits one death
                 }
             }
             return names;
+        }
+
+        private static float Flat(Vec a, Vec b)
+        {
+            float dx = a.X - b.X, dz = a.Z - b.Z;
+            return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
         // A kill note's name token is this creature prefab's: by the meta, else (older traces) by its name.

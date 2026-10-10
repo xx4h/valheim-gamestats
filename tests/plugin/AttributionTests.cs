@@ -43,7 +43,7 @@ static partial class CombatTests
     }
 
     static Vec Off(Vec v, float dx, float dz = 0) => new Vec(v.X + dx, v.Y, v.Z + dz);
-    const long Client = 1234567, Other = 999;
+    const long Client = 1234567, Other = 999, Owner = 555; // Owner: another client that ran the creature
 
     static void RunAttribution(Action<bool, string> check)
     {
@@ -213,8 +213,30 @@ static partial class CombatTests
                 "unaccounted guard: a credited death is never also unaccounted (its ragdoll finds it counted)");
         }
 
+        {
+            // a recorded session: Bonemass deleted with 40.7 of 5,000 left; its loot (no table in that session's meta) and the
+            // game's kill note from the client that ran it to the other fighter — the note alone says it died
+            var s = New();
+            var fighters = L(P("Stick", Off(Here, 4)), P("Söder", Off(Here, -4)));
+            s.Core.CreatureHealth(8312.3f, "9:21170", "Bonemass", Here, 80f, 40.7f, fighters);
+            s.Core.Destroyed(8312.6f, "9:21170", "Bonemass", false, Here, 40.7f, 5000f, fighters, fighters, by: Owner);
+            s.Core.KillNote(8312.6f, Owner, "Söder", "$enemy_bonemass");
+            s.Core.Tick(8320f, fighters);
+            check(s.Get("kill", "Stick", "Bonemass") == 1 && s.Get("kill", "Söder", "Bonemass") == 1 && s.Sum("ukill", "") == 0,
+                "deaths: the game's kill note alone makes a deletion with health left a death — for everyone in the fight");
+        }
+        {
+            // a boss's loot spawns at its centre, metres above its position
+            var s = New();
+            s.Core.CreatureHealth(30f, "1:95", "Seeker", seeker, 30f, 8f, L(M(Off(seeker, 4))));
+            s.Core.Destroyed(30.2f, "1:95", "Seeker", false, seeker, 8f, 400f, L(M(Off(seeker, 4))), L(M(Off(seeker, 4))), by: Client);
+            s.Core.Loot(30.23f, Client + ":906", "Carapace", Client, new Vec(seeker.X + 0.2f, seeker.Y + 3.2f, seeker.Z));
+            s.Core.Tick(40f, L(M(Off(seeker, 4))));
+            check(s.Get("kill", "M", "Seeker") == 1, "deaths: loot counts by its horizontal distance (it spawns at the centre, metres up)");
+        }
+
         // ======== evidence for the killer, when its attacker list never synced (one-hit kills) ========
-        const long Owner = 555; // the client that ran the creature
+
         PlayerState Stick(float dx) => P("Stick", Off(Here, dx), held: "THSwordKrom");
         void OneHit(Sim s, float t, string uid, string kind, long by, Vec at, List<PlayerState> players, string ragdoll = null)
         {
