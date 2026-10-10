@@ -293,6 +293,16 @@ static partial class CombatTests
         Struck("a bow shot 80 m away is no evidence", "BowDraugrFang", 0.3f, 80f, false);
         Struck("a cast without damage (shield) is no evidence", "StaffShield", 0.5f, 2f, false);
         {
+            // a shot 30 m away just before a death that the attacker list already explains: not the archer's kill
+            var s = New();
+            s.Core.Attack(99.6f, "Stick", "BowDraugrFang");
+            s.Core.CreatureHealth(99.9f, "1:8", "Boar", Here, 20f, 0f, L(P("Astrid", Off(Here, 2))));
+            s.Core.Destroyed(100f, "1:8", "Boar", false, Here, 0f, 20f, L(P("Astrid", Off(Here, 2))), L(Stick(30), P("Astrid", Off(Here, 2))), by: Client);
+            s.Core.Tick(110f, L(Stick(30)));
+            check(s.Get("kill", "Astrid", "Boar") == 1 && s.Sum("kill", "Stick") == 0,
+                "evidence guard: a shot from afar only counts when nothing else explains the death");
+        }
+        {
             // one swing, two hares dying in reach at once: it killed one of them
             var s = New();
             s.Core.Attack(99.5f, "Stick", "THSwordKrom");
