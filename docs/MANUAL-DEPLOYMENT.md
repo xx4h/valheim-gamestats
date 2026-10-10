@@ -33,8 +33,8 @@ Every release has both on GitHub's registry: `ghcr.io/xx4h/valheim-gamestats/{co
 network access needed beyond the base images):
 
 ```
-podman build -f containers/collector/Containerfile -t valheim-gamestats-collector:1.22.0 .
-podman build -f containers/web/Containerfile -t valheim-gamestats-web:1.22.0 .
+podman build -f containers/collector/Containerfile -t valheim-gamestats-collector:1.22.1 .
+podman build -f containers/web/Containerfile -t valheim-gamestats-web:1.22.1 .
 ```
 
 (`docker build` takes the same arguments.) Then set `image:` in `compose.yaml` to these tags.

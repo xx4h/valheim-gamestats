@@ -3,7 +3,7 @@
     "webhook_env": "GS_ALERTS_WEBHOOK"
   },
   "interval": 60,
-  "plugin_version": "1.22.0",
+  "plugin_version": "1.22.1",
   "servers": [
     {
       "game": "valheim",

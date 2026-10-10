@@ -36,7 +36,7 @@ namespace ValheimGamestats
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "valheim.gamestats";
-        public const string Version = "1.22.0";
+        public const string Version = "1.22.1";
         internal static bool Diag;  // [Gamestats-diag] lines, off unless the config says so
         internal static Plugin Instance;
         private bool _stopped;

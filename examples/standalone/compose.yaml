@@ -2,7 +2,7 @@
 # docs/MANUAL-DEPLOYMENT.md walks through it. Put a TLS-terminating proxy (Caddy, Traefik, nginx) in front of web.
 services:
   collector:
-    image: ghcr.io/xx4h/valheim-gamestats/collector:1.22.0   # or your own build, see the doc
+    image: ghcr.io/xx4h/valheim-gamestats/collector:1.22.1   # or your own build, see the doc
     restart: unless-stopped
     user: "101:101"
     read_only: true
@@ -17,7 +17,7 @@ services:
       # with a world.path file source (docs/MANUAL-DEPLOYMENT.md, 6.): the game server's files, read-only
       # - /home/valheim/valheim-server:/game:ro
   web:
-    image: ghcr.io/xx4h/valheim-gamestats/web:1.22.0
+    image: ghcr.io/xx4h/valheim-gamestats/web:1.22.1
     restart: unless-stopped
     user: "101:101"
     read_only: true
