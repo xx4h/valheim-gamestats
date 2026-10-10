@@ -269,7 +269,7 @@ class Sim:
         return online
 
     def boot(self, t):
-        self.add(t - 30, e="plugin", i="1.22.1", hooks=15, of=15, failed=[])
+        self.add(t - 30, e="plugin", i="1.22.2", hooks=15, of=15, failed=[])
         self.add(t, e="start", i="Midgard", game="l-1.0.17", backend="PlayFab")
         self.add(t + 20, e="lobby", i="active", code=f"{self.r.randint(100000, 999999)}")
 
