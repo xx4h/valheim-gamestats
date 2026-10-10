@@ -39,7 +39,7 @@ Each [release](https://github.com/xx4h/valheim-gamestats/releases) has the plugi
 The release notes name its sha256 and the game build it was built against:
 
 ```
-curl -fsSLO https://github.com/xx4h/valheim-gamestats/releases/download/v1.22.0/ValheimGamestats.dll && sha256sum ValheimGamestats.dll
+curl -fsSLO https://github.com/xx4h/valheim-gamestats/releases/download/v1.22.1/ValheimGamestats.dll && sha256sum ValheimGamestats.dll
 ```
 
 Or build it yourself (needs the game's reference assemblies, see [plugin/README.md](../plugin/README.md#build)):
@@ -58,7 +58,7 @@ both load and every event counts twice (the collector alerts: `error:copies`).
 ## Kubernetes: `plugin/deploy.sh`
 
 ```
-NS=<namespace> POD=<game server pod> plugin/deploy.sh 1.22.0
+NS=<namespace> POD=<game server pod> plugin/deploy.sh 1.22.1
 ```
 
 For a game server running in a pod (any image with BepInEx, e.g. a hosting panel's). It downloads the release from
