@@ -50,6 +50,7 @@ namespace ValheimGamestats
                 "Record what the combat logic sees to BepInEx/gamestats/trace/ (for replaying a session in tests; a few MB per session)").Value;
             Events.Init(Paths.BepInExRootPath);
             CombatTrace.Warn = msg => Events.Warn("trace", msg);
+            CombatTrace.Fact = body => Events.Emit(body, log: false); // the combat facts, for the collector's rules
             CombatTrace.Init(Paths.BepInExRootPath);
             RconCommandsUtil.RegisterAllCommands(Assembly.GetExecutingAssembly());
             // one class at a time: a game update that breaks one hook disables that hook, not the plugin (and says so)

@@ -207,6 +207,15 @@ plugin records everything the core is told (`CombatTrace.cs`), so a real session
 `dotnet run -- replay <trace.jsonl>` in `tests/plugin` shows what today's rules make of it next to what the plugin made
 of it then, checks it against the rules' invariants and prints the coverage per creature (docs/ATTRIBUTION.md, "Checks").
 
+The facts those rules use also go to the event store, always (not only with Trace on): events `cf` with the
+trace's shapes in `k` — `attack` (with its animation), `player` (health drops that aren't food), `health` (with the
+creature's owner and the players' clients), `trig` (a summon's attack, with what it holds), `hit` (a routed hit on a
+creature), `killnote`, `destroy`, `ragdoll`, `drop` (a new item some creature drops, made by a client), and once per
+start the prefabs' facts as `meta0` and parts `meta` (`s`: the section, `d`: its entries; each part fits one store
+reply). No ticks, no food lines, no results — about 5,000 a busy day. They're for the collector's own combat rules,
+which recompute the results from them (retroactively when a rule changes); until those exist, the collector stores
+them and sums nothing from them.
+
 Tamed creatures are not combat (since 1.8.0): hitting or butchering a pet counts
 as neither damage dealt nor a kill. `Pets.cs` logs the death of every tamed creature (one `petdeath` line, not
 summed): its identity (prefab + BaseAI's `spawntime`, the key the collector

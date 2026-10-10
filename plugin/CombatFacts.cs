@@ -24,6 +24,7 @@ namespace ValheimGamestats
         private static readonly Dictionary<ZDOID, long> Owners = new Dictionary<ZDOID, long>();
         private static readonly HashSet<ZDOID> SeenDrops = new HashSet<ZDOID>();
         private static HashSet<int> _items;
+        private static readonly HashSet<int> _lootItems = new HashSet<int>(); // items some creature drops
         private static bool _meta;
 
         // Once the prefabs are known: what a death leaves (per creature: the ragdolls its death spawns, none for the
@@ -101,8 +102,11 @@ namespace ValheimGamestats
                         meta.Costs[go.name + "/" + attack.m_attackAnimation] = (attack.m_attackHealth, attack.m_attackHealthPercentage);
             }
             meta.NoRagdoll.UnionWith(noRagdoll);
-            if (CombatTrace.Enabled && !_meta)
-                CombatTrace.Meta(noRagdoll, meta);
+            foreach (var table in meta.Drops.Values)
+                foreach (var item in table.Keys)
+                    _lootItems.Add(item.GetStableHashCode());
+            if (!_meta)
+                CombatTrace.Meta(noRagdoll, meta); // the facts' meta (in parts) always, the trace's when it's on
             _meta = true;
             return meta;
         }
@@ -159,8 +163,6 @@ namespace ValheimGamestats
                      && Follow(summon) is string follow)
                 Combat.Core.SummonHit(Time.time, Uid(target), follow, Gather.PrefabName(summon), Direct(hit.m_damage), Later(hit.m_damage),
                     Variant(summon));
-            if (!CombatTrace.Enabled)
-                return;
             var se = hit.m_statusEffectHash == 0 ? null : ObjectDB.instance?.GetStatusEffect(hit.m_statusEffectHash)?.name ?? hit.m_statusEffectHash.ToString();
             CombatTrace.Hit(Time.time, Uid(target), Who(target), target.GetBool(ZDOVars.s_tamed), target.GetOwner(),
                 PeerName(data.m_senderPeerID), hit.m_attacker.IsNone() ? null : hit.m_attacker.ToString(), who,
@@ -180,9 +182,8 @@ namespace ValheimGamestats
                 var attackers = pkg.ReadInt();
                 var to = ZNet.instance.GetPeer(data.m_targetPeerID)?.m_playerName;
                 Combat.Core.KillNote(Time.time, data.m_senderPeerID, to, kind);
-                if (CombatTrace.Enabled)
-                    CombatTrace.KillNote(Time.time, PeerName(data.m_senderPeerID), PeerName(data.m_targetPeerID), kind, boss, attackers,
-                        data.m_senderPeerID);
+                CombatTrace.KillNote(Time.time, PeerName(data.m_senderPeerID), PeerName(data.m_targetPeerID), kind, boss, attackers,
+                    data.m_senderPeerID);
             }
             finally
             {
@@ -211,9 +212,8 @@ namespace ValheimGamestats
             }
             var follow = Follow(zdo);
             var tamed = zdo.GetBool(ZDOVars.s_tamed);
-            if (CombatTrace.Enabled)
-                CombatTrace.Trigger(Time.time, Uid(zdo), Who(zdo), trigger, follow, tamed, zdo.GetOwner(), Vec(zdo.GetPosition()),
-                    ItemName(zdo.GetInt(ZDOVars.s_rightItem)), ItemName(zdo.GetInt(ZDOVars.s_leftItem)));
+            CombatTrace.Trigger(Time.time, Uid(zdo), Who(zdo), trigger, follow, tamed, zdo.GetOwner(), Vec(zdo.GetPosition()),
+                ItemName(zdo.GetInt(ZDOVars.s_rightItem)), ItemName(zdo.GetInt(ZDOVars.s_leftItem))); // a fact for summons
             if (tamed && follow != null)
                 Combat.Core.Summon(Time.time, Uid(zdo), Gather.PrefabName(zdo), trigger, follow, Vec(zdo.GetPosition()), zdo.GetOwner(), Variant(zdo));
         }
@@ -248,8 +248,10 @@ namespace ValheimGamestats
                 return;
             if (SeenDrops.Count > 5000)
                 SeenDrops.Clear();
-            if (CombatTrace.Enabled)
-                CombatTrace.Drop(Time.time, Uid(zdo), Gather.PrefabName(zdo), zdo.GetInt(ZDOVars.s_stack, 1), zdo.GetOwner(), Vec(zdo.GetPosition()));
+            // a fact when it can be a death's loot: in some creature's drop table, made by a client (not the server)
+            var loot = _lootItems.Contains(zdo.GetPrefab()) && (long)zdo.m_uid.UserID != ZDOMan.GetSessionID();
+            if (CombatTrace.Enabled || loot)
+                CombatTrace.Drop(Time.time, Uid(zdo), Gather.PrefabName(zdo), zdo.GetInt(ZDOVars.s_stack, 1), zdo.GetOwner(), Vec(zdo.GetPosition()), loot);
             Combat.Core.Loot(Time.time, Uid(zdo), Gather.PrefabName(zdo), (long)zdo.m_uid.UserID, Vec(zdo.GetPosition()));
         }
 

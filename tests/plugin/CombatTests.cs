@@ -220,5 +220,51 @@ static partial class CombatTests
                   && facts[0].GetProperty("reach").GetProperty("Skeleton_Friendly/attack_bow").GetDouble() == 30.0,
                 "trace: the facts (meta, trig, hit, killnote, rise, pethp, owner, drop) are valid JSON, ids exact, and replay skips them");
         }
+        // ---- the combat facts: what goes to the event store for the collector's rules (and what doesn't)
+        {
+            var facts = new List<string>();
+            CombatTrace.Enabled = false; // facts don't need the trace
+            CombatTrace.Fact = facts.Add;
+            var party = L(new PlayerState("Ragnar", true, false, Here, "SwordIron", 11), new PlayerState("Astrid", true, false, At(3), "Bow", 12));
+            var meta = new CombatMeta();
+            for (var k = 0; k < 400; k++)
+                meta.Drops["Creature" + k] = new Dictionary<string, float> { ["Item" + k] = 0.5f, ["TrophyCreature" + k] = 0.1f };
+            meta.Weapons["SwordIron"] = (false, 2.4f, true);
+            meta.Names["Troll"] = "$enemy_troll";
+            CombatTrace.Meta(new List<string> { "Seeker", "Tick" }, meta);
+            CombatTrace.Attack(10f, "Ragnar", "SwordIron", "swing_longsword0");
+            CombatTrace.Player(10.1f, "Ragnar", 100f, 80f, 150f, 150f);
+            CombatTrace.Player(10.2f, "Ragnar", 150f, 140f, 150f, 140f);       // food wearing off: no fact
+            CombatTrace.Health(10.3f, "1:1", "Troll*1", Here, 600f, 540f, party, 11);
+            CombatTrace.Trigger(10.4f, "2:2", "Skeleton_Friendly", "attack", "Astrid", true, 12, Here, "skeleton_sword2", "ShieldWood");
+            CombatTrace.Trigger(10.5f, "1:1", "Troll*1", "attack", null, false, 11, Here);   // a creature's own attack: no fact
+            CombatTrace.Hit(10.6f, "1:1", "Troll*1", false, 11, "Astrid", "7:7", "player:Astrid", new List<(string, float)> { ("pierce", 40f) },
+                "PlayerHit", null, "Bows", 30f, 3, 1f, Here);
+            CombatTrace.Hit(10.7f, "7:7", "player:Astrid", false, 12, "Ragnar", "1:1", "Troll*1", new List<(string, float)> { ("blunt", 20f) },
+                "EnemyHit", null, "None", 0f, 1, 1f, Here);                                        // a hit on a player: no fact
+            CombatTrace.KillNote(11f, "Ragnar", "Astrid", "$enemy_troll", 0, 2, 11);
+            CombatTrace.Destroyed(11.1f, "1:1", "Troll*1", false, Here, 0f, 1200f, party, party, false, 11, "Ragnar", null);
+            CombatTrace.Ragdoll(11.2f, "3:3", "Troll", 2, Here, "Troll_ragdoll");
+            CombatTrace.Drop(11.3f, "11:5", "TrophyTroll", 1, 11, Here, loot: true);
+            CombatTrace.Drop(11.4f, "11:6", "Wood", 10, 11, Here);                                // not loot: no fact
+            CombatTrace.Tick(12f, party);                                                          // no fact
+            CombatTrace.Out("dmg", "Ragnar", "Troll*1", 60);                                       // no fact
+            CombatTrace.Fact = null;
+            var parsed = facts.Select(f => System.Text.Json.JsonDocument.Parse(f).RootElement).ToList();
+            var kinds = parsed.Where(j => j.GetProperty("k").GetString() is not ("meta" or "meta0")).Select(j => j.GetProperty("k").GetString()).ToList();
+            check(facts.All(f => f.StartsWith("{\"e\":\"cf\",\"k\":\"")),
+                "facts: every one an event {\"e\":\"cf\",\"k\":<kind>,…}, valid JSON");
+            check(kinds.SequenceEqual(new[] { "attack", "player", "health", "trig", "hit", "killnote", "destroy", "ragdoll", "drop" }),
+                "facts: what the rules use — not food, a creature's own attack, hits on players, non-loot items, ticks, results");
+            check(parsed.First(j => j.GetProperty("k").GetString() == "attack").GetProperty("an").GetString() == "swing_longsword0",
+                "facts: an attack carries its animation (blood magic costs)");
+            var parts = parsed.Where(j => j.GetProperty("k").GetString() == "meta").ToList();
+            check(parsed[0].GetProperty("k").GetString() == "meta0" && parts.Count > 3 && facts.All(f => f.Length < 3000)
+                  && parts.Where(j => j.GetProperty("s").GetString() == "drops").Sum(j => j.GetProperty("d").EnumerateObject().Count()) == 400,
+                "facts: the meta as a start and parts that each fit one store reply, together all of it");
+            var store = new EventStore(Directory.CreateTempSubdirectory("facts").FullName, _ => { }, () => DateTimeOffset.UnixEpoch);
+            check(facts.All(f => store.Append(f) > 0), "facts: the store takes every one (none too big for a reply)");
+            store.Close();
+        }
     }
 }

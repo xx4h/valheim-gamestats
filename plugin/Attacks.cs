@@ -52,8 +52,7 @@ namespace ValheimGamestats
             if (weapon == null)
                 return;
             var now = Time.time;
-            if (CombatTrace.Enabled)
-                CombatTrace.Attack(now, peer.m_playerName, weapon);
+            CombatTrace.Attack(now, peer.m_playerName, weapon, trigger); // a combat fact (and the trace)
             Combat.Core.Attack(now, peer.m_playerName, weapon, trigger);
         }
 
