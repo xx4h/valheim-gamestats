@@ -1,10 +1,11 @@
 {
  "_": [
   "The contract between the plugin, the collector and the page: every event the plugin sends (from: its source",
-  "file in plugin/), what the collector makes of it (becomes) and which stat on the page shows it, and every",
-  "data.json key with where it comes from. tests: the collector tests that cover it.",
-  "tests/collector/test_contract.py keeps this true: the plugin can't send an event that isn't here, nothing here",
-  "goes untested, and data.json has exactly these keys (test_build). New event or stat: add it here first."
+  "file in plugin/) or the collector's combat rules make on their own (from: combat.py), what the collector makes of",
+  "it (becomes) and which stat on the page shows it, and every data.json key with where it comes from. tests: the",
+  "collector tests that cover it. tests/collector/test_contract.py keeps this true: the plugin can't send an event",
+  "that isn't here, nothing here goes untested, and data.json has exactly these keys (test_build). New event or",
+  "stat: add it here first."
  ],
  "events": {
   "pick": {
@@ -488,6 +489,16 @@
     "test_events.FromTheStore.test_bookkeeping_is_not_gathered"
    ],
    "since": "1.20.0"
+  },
+  "edmg": {
+   "from": "combat.py",
+   "becomes": "gather",
+   "page": "Effective damage: what the hits would have done without the game scaling a creature's damage taken down by the players near it (1/(1+0.3(n-1))); boss fights, player page. Only where the health facts carry n (plugin 1.22.0)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event",
+    "test_combat.Effective.test_scaled_by_the_players_near",
+    "test_fights.Fights.test_fight_effective_damage"
+   ]
   }
  },
  "legacy": {

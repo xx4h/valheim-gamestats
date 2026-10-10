@@ -325,7 +325,7 @@
     for (const [t, p, e, i, n] of d.gather || []) {
       if (t < a || t >= b || (only && p !== only) || !per.has(p)) continue;
       const r = per.get(p);
-      const key = { dist: 'dist', crouch: 'crouch', exh: 'exh', exhn: 'exhn', emote: 'emotes', bed: 'beds', pick: 'picked', loot: 'looted', fell: 'felled', mine: 'mined', kill: 'kills', dmg: 'dealt', taken: 'taken', hit: 'hitsTaken', cost: 'paid', sdw: 'sdealt', skw: 'skills', wkill: 'wkills', wdmg: 'wdealt', kw: 'kwc', dw: 'dwc' }[e];
+      const key = { dist: 'dist', crouch: 'crouch', exh: 'exh', exhn: 'exhn', emote: 'emotes', bed: 'beds', pick: 'picked', loot: 'looted', fell: 'felled', mine: 'mined', kill: 'kills', dmg: 'dealt', edmg: 'edealt', taken: 'taken', hit: 'hitsTaken', cost: 'paid', sdw: 'sdealt', skw: 'skills', wkill: 'wkills', wdmg: 'wdealt', kw: 'kwc', dw: 'dwc' }[e];
       if (!key) continue;
       r[key] = (r[key] || 0) + n;
       (r.gathered ||= {})[key] ||= new Map();
@@ -2659,7 +2659,8 @@
       collected: () => (gatherOn ? kpi('Collected', nf(r.picked || 0), mostly('picked') || 'items picked up') : null),
       felled: () => (gatherOn ? kpi('Felled · mined', `${nf(r.felled || 0)} · ${nf(r.mined || 0)}`, 'trees · rocks & ore') : null),
       kills: () => (gatherOn ? kpi('Kills', nf(r.kills || 0), mostly('kills')) : null),
-      dealt: () => (gatherOn ? kpi('Damage dealt', nf(Math.round(r.dealt || 0)), mostly('dealt') || 'health removed from creatures') : null),
+      dealt: () => (gatherOn ? kpi('Damage dealt', nf(Math.round(r.dealt || 0)),
+        r.edealt ? `${nf(Math.round(r.edealt))} effective${mostly('dealt') ? ` · ${mostly('dealt')}` : ''}` : mostly('dealt') || 'health removed from creatures') : null),
       buddy: () => kpi('Best buddy', together.size ? [...together].sort((x, y) => y[1] - x[1])[0][0] : '–',
         together.size ? `${fH([...together].sort((x, y) => y[1] - x[1])[0][1])} together` : null),
       pieces: () => (S.data.world ? kpi('Pieces built', nf(S.data.world.pieces[p]?.total || 0), 'standing in the world now', { title: 'Their builds', href: gearHref }) : null),
@@ -3821,6 +3822,8 @@
   const fightHref = (f) => `#/fight/${encodeURIComponent(f.id)}`;
   const OUTCOME = { killed: '✔ Killed', retreat: '✘ Retreated', ongoing: '⚔ Ongoing' };
   const FIGHT_SPLIT = 'Damage per player is split by who attacked (plugin 1.5.0+)';
+  // effective damage (collector: combat.py edmg): the game scales damage to a creature down by the players near it
+  const EFFECTIVE = 'Effective damage: what the hits would have done to a creature fought alone. With n players within 100 m the game lets a creature take only 1/(1 + 0.3·(n−1)) of each hit (n up to 5). Known since plugin 1.22.0.';
   const FIGHT_EVEN = 'Fought before plugin 1.5.0: each health drop was split evenly over everyone who had hit the boss, so the per-player damage is an estimate — the total is exact';
   const fightsIn = () => (S.data.fights || []).filter((f) => f.e >= S.a && f.s < S.b);
   const topWeapons = (w, n = 2) => Object.entries(w).sort((x, y) => y[1] - x[1]).slice(0, n).map(([k]) => gatherLabel(k)).join(', ');
@@ -3900,10 +3903,14 @@
     const healed = f.outcome === 'killed' && hp && f.dmg > hp ? f.dmg - hp : 0;
     const weapons = new Map();
     for (const v of ps) for (const [w, n] of Object.entries(v.w)) weapons.set(w, (weapons.get(w) || 0) + n);
+    const eff = f.edmg != null;  // effective damage known (plugin 1.22.0+)
     const pt = el('div', { class: 'table-wrap' }, el('table', null,
-      el('thead', null, el('tr', null, ['Player', 'Damage', 'Share', 'Weapons', 'Deaths', 'Damage taken', 'Kill'].map((h, i) => el('th', { class: i && i !== 3 ? 'r' : null, text: h })))),
+      el('thead', null, el('tr', null, ['Player', 'Damage', ...(eff ? ['Effective'] : []), 'Share', 'Weapons', 'Deaths', 'Damage taken', 'Kill']
+        .map((h) => el('th', { class: h !== 'Player' && h !== 'Weapons' ? 'r' : null, text: h, title: h === 'Effective' ? EFFECTIVE : null })))),
       el('tbody', null, ps.map((v) => el('tr', null,
-        el('td', null, playerLink(v.p)), el('td', { class: 'r', text: nf(v.d) }), el('td', { class: 'r', text: f.dmg ? pct(v.d / f.dmg) : '–' }),
+        el('td', null, playerLink(v.p)), el('td', { class: 'r', text: nf(v.d) }),
+        eff ? el('td', { class: 'r', text: v.ed != null ? nf(v.ed) : '–' }) : null,
+        el('td', { class: 'r', text: f.dmg ? pct(v.d / f.dmg) : '–' }),
         el('td', { text: topWeapons(v.w, 3) || '–' }), el('td', { class: 'r', text: v.x ? nf(v.x) : '–' }),
         el('td', { class: 'r', text: v.tk ? nf(v.tk) : '–' }), el('td', { class: 'r', text: v.k ? '✔' : '–' }))))));
     // one chip per death, in order: minutes into the fight, coloured by player
@@ -3917,6 +3924,7 @@
         kpi('Outcome', OUTCOME[f.outcome] || f.outcome, f.outcome === 'retreat' ? 'nobody hurt it for 15 min' : null),
         kpi('Duration', fDur(dur), `${fTime(f.s)} – ${fTime(f.e)}`),
         kpi('Damage dealt', nf(f.dmg), healed ? `${nf(hp)} + ${nf(healed)} healed` : hp ? `of ${nf(hp)} health` : null),
+        eff ? kpi('Effective damage', nf(f.edmg), f.dmg ? `×${nf(f.edmg / f.dmg, 2)} before player scaling` : null) : null,
         kpi('Deaths', nf(f.deaths.length), dur >= 600 && f.deaths.length ? `one every ${fDur(dur / f.deaths.length)}` : null),
         kpi('Players', nf(ps.length), others.length > 1 ? `fight ${others.indexOf(f) + 1} of ${others.length} against it` : 'the only fight against it')),
       el('div', { class: 'grid' },

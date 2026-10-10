@@ -8,8 +8,11 @@ import unittest
 
 from logs import read_json  # first: puts collector/ (the package's directory) on the path
 
+from valheim_gamestats import combat
+
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 CONTRACT = read_json(os.path.join(ROOT, "docs", "events.json"))
+COLLECTOR = "combat.py"  # "from" of the events only the collector's combat rules make (combat.COLLECTOR_ONLY)
 
 # The plugin's emit helpers (Gather.Add, Custody.Log, Dungeons' Log, Gather's Credit, Vitals' Event, Server's Player,
 # CombatCore's _add):
@@ -57,7 +60,8 @@ def tests():
 
 class Contract(unittest.TestCase):
     def test_plugin_sends_only_what_the_contract_knows(self):
-        sent, known = plugin_events(), CONTRACT["events"]
+        sent = plugin_events()
+        known = {e: c for e, c in CONTRACT["events"].items() if c["from"] != COLLECTOR}
         self.assertGreater(len(sent), 40, "the scan found too little: has the plugin's way of sending changed?")
         self.assertEqual(sorted(set(sent) - set(known)), [], "events the plugin sends that docs/events.json doesn't list")
         self.assertEqual(sorted(set(known) - set(sent)), [], "events docs/events.json lists that the plugin never sends")
@@ -66,7 +70,15 @@ class Contract(unittest.TestCase):
         sent = plugin_events()
         for e, c in CONTRACT["events"].items():
             with self.subTest(event=e):
-                self.assertIn(c["from"], sent.get(e, set()))
+                if c["from"] == COLLECTOR:
+                    self.assertNotIn(e, sent, "the collector's own, but the plugin sends it too")
+                else:
+                    self.assertIn(c["from"], sent.get(e, set()))
+
+    def test_the_collectors_own_events(self):
+        own = {e for e, c in CONTRACT["events"].items() if c["from"] == COLLECTOR}
+        self.assertEqual(own, combat.COLLECTOR_ONLY)
+        self.assertLessEqual(own, combat.RESULTS)  # results: replaced per run like the plugin's
 
     def test_every_entry_is_tested(self):
         have = tests()

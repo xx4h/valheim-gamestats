@@ -51,6 +51,9 @@ python3 tools/combat_fixture.py <trace> <out.jsonl.gz> [from] [to]   # a recorde
   for line, with `combat.RULES` bumped (the collector recomputes everything) and `tests/combat/*.expected.json`
   rewritten (`dotnet run -- expect`); `tests/plugin` and `tests/collector/test_combat.py` both check them. New fixtures
   come from `tools/combat_fixture.py`, with invented names — never a real player's.
+  Results only the collector makes (`combat.COLLECTOR_ONLY`, e.g. effective damage `edmg`) live in `combat.py` alone:
+  docs/events.json lists them `"from": "combat.py"`, the parity check leaves them out — the plugin stops computing combat
+  eventually, so new kinds of results go to the collector only.
 
 - **A new event or `data.json` key goes into [docs/events.json](docs/events.json) first**, with its tests.
   `test_contract.py` fails when the plugin sends an event that isn't listed, or an entry has no test about it;
