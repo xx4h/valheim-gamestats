@@ -2737,6 +2737,7 @@
           card('Damage by weapon', 'Health removed, in range', gBars(['wdealt'], 'No damage dealt in range.', 'item'), 'span-6'),
           card('Kills by weapon', 'In range', gBars(['wkills'], 'No kills in range.', 'item'), 'span-6'),
           summonsCard(r),
+          skillsCard(p),
           card('Collected', 'Items picked up, by kind', gBars(['picked'], 'Nothing picked up in range.', 'item'), 'span-6'),
           card('Felled & mined', 'Trees, rocks and ore deposits', gBars(['felled', 'mined'], 'Nothing felled or mined in range.'), 'span-6'),
           ...bodyCards(p, r),
@@ -3046,6 +3047,28 @@
 
   // ---- summons a player fought with: by race (the creature) and type (what it held), from the plugin's sdw / skw
   // ("Skeleton_Friendly:skeleton_sword2+ShieldWood>Bonemass": kind, held items, the creature it hit)
+  // Skill levels as combat showed them (collector: combat.py, event "skill" → peaks "skill:<Skill>", the highest per
+  // hour): a routed hit carries its attacker's level in the weapon's skill (with what food, meads and armour add), a
+  // blood magic cost its level. Arrows and bolts don't carry it; skills never used in a fight don't show.
+  function skillsCard(p) {
+    const by = new Map();
+    for (const [t, q, k, v] of S.data.peaks || []) {
+      if (q !== p || !k.startsWith('skill:') || t < S.a || t >= S.b) continue;
+      const s = by.get(k) || by.set(k, { k: k.slice(6), first: v, last: v, top: v, t }).get(k);
+      if (t >= s.t) { s.last = v; s.t = t; }
+      s.top = Math.max(s.top, v);
+    }
+    if (!by.size) return null;
+    const rows = [...by.values()].sort((x, y) => y.last - x.last);
+    const tbl = el('div', { class: 'table-wrap' }, el('table', null,
+      el('thead', null, el('tr', null, ['Skill', 'Level', 'Change', 'Highest', 'Last seen'].map((h, i) => el('th', { class: i ? 'r' : null, text: h })))),
+      el('tbody', null, rows.map((s) => el('tr', null,
+        el('td', { text: pretty(s.k) }), el('td', { class: 'r', text: nf(s.last) }),
+        el('td', { class: 'r', text: s.last !== s.first ? `${s.last > s.first ? '+' : '−'}${nf(Math.abs(s.last - s.first))}` : '–' }),
+        el('td', { class: 'r', text: nf(s.top) }), el('td', { class: 'r', text: fAgo(S.data.generated - s.t) }))))));
+    return card('Skills seen in combat', 'Levels as their hits and blood magic showed them, effects of food, meads and armour included · in range (plugin 1.22.0+)', tbl, 'span-6');
+  }
+
   function summonsCard(r) {
     const rows = new Map();
     for (const [key, field] of [['sdealt', 'd'], ['skills', 'k']])
