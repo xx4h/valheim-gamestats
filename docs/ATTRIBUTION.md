@@ -41,7 +41,7 @@ the collector credits exactly whom the plugin's line names, no one more, and
 | Stat | Credited to | Source |
 |---|---|---|
 | Damage dealt | players in the mob's attacker list who attacked within 3 s before the health drop, alive and within 60 m; one share per attack, else split evenly | plugin |
-| Kill | every attacker of a mob that died with health ≤ 0 (alive, within 60 m); a one-hit kill seen only as a ragdoll **of its own kind**: its known attackers; a creature without a ragdoll (Seekers, Ticks, Blobs, bosses …) deleted with health left: a kill when its own loot (its drop table, created by the client that deleted it, within 3 m and 2 s) appears — not for creatures deleted on a timer (enemy summons) | plugin |
+| Kill | for a death (health ≤ 0, a ragdoll **of its own kind**, or — see below — its own loot): every attacker on its list (alive, within 60 m), and every player the other evidence names: the game's kill note to them, a routed hit of theirs on it, their own damaging attack just before in reach of it (melee: 1.5 s, the weapon's reach + 4 m; ranged: 3 s, 60 m; one attack for one death); credited 3 s after the death; a creature without a ragdoll (Seekers, Ticks, Blobs, bosses …) deleted with health left: a kill when its own loot (its drop table, created by the client that deleted it, within 3 m and 2 s) appears — not for creatures deleted on a timer (enemy summons) | plugin |
 | Damage / hits taken | the player whose health dropped (not a drop to a new, lower max health: food wearing off; not the cost of their own blood magic) | plugin |
 | Health paid | the player whose own health-cost attack (Dead Raiser, Staff of Protection, Trollstav …) took it: the drop right after its trigger, from a third less (blood magic skill) up to the full cost; a hit in the same sync is the rest, as damage taken | plugin |
 | Pet killed | never a kill or damage dealt; recorded as the pet's death | plugin ≥ 1.8.0 |
@@ -49,14 +49,16 @@ the collector credits exactly whom the plugin's line names, no one more, and
 
 ### Unaccounted kills
 
-A kill is only ever credited on evidence: a player on the creature's attacker list who was alive and within 60 m. A
-death the server saw (health 0, a ragdoll of its kind,
+A kill is only ever credited on evidence: a player on the creature's attacker list who was alive and within 60 m; the
+game's own kill note naming them (sent by the client that ran the creature); a hit of theirs the server routed to that
+client; or their own damaging attack just before the death, within reach of it. The last three matter for one-hit
+kills: the creature dies before its attacker list reaches the server. A death the server saw (health 0, a ragdoll of its kind,
 or its own loot) with none of that is **not** given to whoever happened to be nearby. It is counted as an unaccounted
 kill instead — event `ukill`, no player, the creature as the object — and shown on the page **Combat → Unaccounted
 kills** (how many, which creatures, when).
 
 Typical causes: traps, turrets and the environment; creatures fighting each other (Dvergers and Seekers in the
-Mistlands); a one-hit kill whose last update never reached the server, so its attacker list never showed the player; a
+Mistlands); summons (until they are attributed); a
 ragdoll whose deletion never arrived (then the creature is named by every kind that ragdoll can belong to, e.g.
 `Goblin/GoblinArcher`).
 

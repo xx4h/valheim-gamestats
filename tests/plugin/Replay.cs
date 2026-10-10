@@ -23,6 +23,12 @@ static class Replay
             d.TryGetValue((e, p, i), out var have);
             d[(e, p, i)] = have + n;
         }
+        var all = lines.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => JsonDocument.Parse(l).RootElement).ToList();
+        // older traces: kill notes name their sender, deletions name and number theirs — map one to the other
+        var clients = new Dictionary<string, long>();
+        foreach (var j in all.Where(j => S(j, "k") == "destroy" && Has(j, "from") && Has(j, "own")))
+            clients[S(j, "from")] = j.GetProperty("own").GetInt64();
+        var weaponsSeen = new HashSet<string>(all.Where(j => S(j, "k") == "attack").Select(j => S(j, "w")));
         var core = new CombatCore((e, p, i, n) => Add(now, e, p, i, n));
         Remaining.Clear();
         core.Died = (name, remaining) => Remaining[name] = Remaining.GetValueOrDefault(name) + remaining;
@@ -35,11 +41,8 @@ static class Replay
                 core.Attack(t, p, w, animation);
             held = null;
         }
-        foreach (var line in lines)
+        foreach (var j in all)
         {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-            var j = JsonDocument.Parse(line).RootElement;
             var kind = j.GetProperty("k").GetString();
             if (Has(j, "t"))
                 last = F(j, "t");
@@ -48,7 +51,15 @@ static class Replay
             switch (kind)
             {
                 case "meta":
-                    core.Meta(Meta(j));
+                    core.Meta(Meta(j, weaponsSeen));
+                    break;
+                case "killnote":
+                    core.KillNote(F(j, "t"), Has(j, "fromid") && j.GetProperty("fromid").GetInt64() != 0 ? j.GetProperty("fromid").GetInt64()
+                        : clients.GetValueOrDefault(S(j, "from")), S(j, "to"), S(j, "kind"));
+                    break;
+                case "hit":
+                    if (S(j, "am") is string am && am.StartsWith("player:"))
+                        core.Hit(F(j, "t"), S(j, "u"), am.Substring(7), (float)j.GetProperty("d").EnumerateObject().Sum(d => d.Value.GetDouble()));
                     break;
                 case "attack":
                     held = (F(j, "t"), S(j, "p"), S(j, "w"));
@@ -87,7 +98,8 @@ static class Replay
 
     // The invariants of docs/ATTRIBUTION.md ("Checks"), on a real session, for what the core made of it (`now`):
     //   I1  every player credited with damage or a kill on a kind has evidence for it in the trace: on an attacker list
-    //       of that kind, or a summon of theirs attacked within 10 s and 40 m of one
+    //       of that kind, a routed hit on one, a kill note naming them for one, their own attack just before a deletion
+    //       of one within reach, or a summon of theirs that attacked within 10 s and 40 m of one
     //   I3  no player has more kills of a kind than the trace has deaths of it (deletions + ragdolls of that kind)
     // and per creature kind: health lost vs damage credited to players (coverage).
     internal static (List<string> Violations, List<string> Coverage) Invariants(IEnumerable<string> lines,
@@ -98,6 +110,10 @@ static class Replay
         var lost = new Dictionary<string, double>();
         var seen = new List<(float T, string Kind, Vec Pos)>();
         var summons = new List<(float T, string Player, Vec Pos)>();
+        var hitters = new HashSet<(string Player, string Kind)>();
+        var noted = new HashSet<(string Player, string Token)>();
+        var attacks = new List<(float T, string Player)>();
+        var destroys = new List<(float T, string Kind, Vec Pos, List<(string N, Vec Pos)> Players)>();
         foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -114,10 +130,24 @@ static class Replay
                     if (S(j, "k") == "health")
                         lost[kind] = lost.GetValueOrDefault(kind) + System.Math.Max(0, F(j, "b") - System.Math.Max(0, F(j, "a")));
                     else if (!j.GetProperty("tamed").GetBoolean())
+                    {
                         deaths[kind] = deaths.GetValueOrDefault(kind) + 1;
+                        destroys.Add((F(j, "t"), kind, Pos(j),
+                            j.GetProperty("ps").EnumerateArray().Where(p => p.GetProperty("b").GetBoolean()).Select(p => (S(p, "n"), Pos(p))).ToList()));
+                    }
                     break;
                 case "ragdoll":
                     deaths[S(j, "c")] = deaths.GetValueOrDefault(S(j, "c")) + 1;
+                    break;
+                case "hit":
+                    if (S(j, "am") is string am && am.StartsWith("player:"))
+                        hitters.Add((am.Substring(7), S(j, "m")));
+                    break;
+                case "killnote":
+                    noted.Add((S(j, "to"), S(j, "kind")));
+                    break;
+                case "attack":
+                    attacks.Add((F(j, "t"), S(j, "p")));
                     break;
                 case "trig":
                     if (Has(j, "tamed") && j.GetProperty("tamed").GetBoolean() && S(j, "fol") != null)
@@ -125,6 +155,11 @@ static class Replay
                     break;
             }
         }
+        // their own attack within HitWindow before a deletion of that kind, within AttackerRange of it
+        bool Struck(string player, string kind) => destroys.Any(d => d.Kind == kind && d.Players.Any(p => p.N == player
+            && Vec.Distance(p.Pos, d.Pos) <= CombatCore.AttackerRange
+            && attacks.Any(a => a.Player == player && a.T <= d.T && d.T - a.T <= CombatCore.HitWindow)));
+        bool Noted(string player, string kind) => noted.Any(n => n.Player == player && n.Token.EndsWith("_" + kind.Split('*')[0].ToLowerInvariant()));
         bool ViaSummon(string player, string kind) => summons.Any(s => s.Player == player
             && seen.Any(c => c.Kind == kind && System.Math.Abs(c.T - s.T) <= 10 && Vec.Distance(c.Pos, s.Pos) <= 40));
         var violations = new List<string>();
@@ -132,8 +167,8 @@ static class Replay
         {
             if (e != "dmg" && e != "kill")
                 continue;
-            if (!listed.Contains((p, i)) && !ViaSummon(p, i))
-                violations.Add($"I1: {p} credited {e} {n:0.#} on {i} without being on its attacker list or a summon of theirs near it");
+            if (!listed.Contains((p, i)) && !ViaSummon(p, i) && !hitters.Contains((p, i)) && !Noted(p, i) && !Struck(p, i))
+                violations.Add($"I1: {p} credited {e} {n:0.#} on {i} without evidence (attacker list, routed hit, kill note, own attack in reach, summon)");
         }
         foreach (var ((e, p, i), n) in now)
             if (e == "kill" && n > deaths.GetValueOrDefault(i) + 1e-6)
@@ -163,9 +198,16 @@ static class Replay
     // "Skeleton_Friendly*1" / "player:Ragnar" → the prefab
     private static string Prefab(string who) => who.Split('*')[0];
 
-    private static CombatMeta Meta(JsonElement j)
+    private static CombatMeta Meta(JsonElement j, HashSet<string> weaponsSeen)
     {
         var meta = new CombatMeta();
+        if (j.TryGetProperty("names", out var names))
+            foreach (var n in names.EnumerateObject())
+                meta.Names[n.Name] = n.Value.GetString();
+        if (j.TryGetProperty("weapons", out var weapons))
+            foreach (var w in weapons.EnumerateObject())
+                meta.Weapons[w.Name] = (w.Value.GetProperty("ranged").GetBoolean(), (float)w.Value.GetProperty("reach").GetDouble(),
+                    w.Value.GetProperty("harmful").GetBoolean());
         if (j.TryGetProperty("ragdolls", out var ragdolls))
             foreach (var r in ragdolls.EnumerateObject())
                 meta.Ragdolls[r.Name] = r.Value.EnumerateArray().Select(c => c.GetString()).ToList();
@@ -187,8 +229,18 @@ static class Replay
         if (j.TryGetProperty("reach", out var reach))
             foreach (var r in reach.EnumerateObject())
                 meta.Reach[r.Name] = (float)r.Value.GetDouble();
+        if (!j.TryGetProperty("weapons", out _))
+            // older traces: bows, crossbows and damaging staffs shoot; blood magic (a health cost) and shields do no damage
+            foreach (var w in weaponsSeen)
+            {
+                var costs = meta.Costs.Keys.Any(k => k.StartsWith(w + "/"));
+                var ranged = w.StartsWith("Bow") || w.StartsWith("Crossbow") || w.StartsWith("Staff");
+                meta.Weapons[w] = (ranged, MeleeGuess, !costs && w != "StaffShield");
+            }
         return meta;
     }
+
+    private const float MeleeGuess = 3f;
 
     internal static (Dictionary<(string, string, string), double> Now, Dictionary<(string, string, string), double> Then) Run(string file) =>
         Run(File.ReadLines(file));

@@ -91,8 +91,10 @@ static partial class CombatTests
             s.Core.Attack(10f, "Ragnar", "SwordIron");
             s.Core.CreatureHealth(10.5f, "1:1", "Troll*1", Here, 50f, -5f, L(P("Ragnar", At(3)), P("Astrid", At(3))));
             s.Core.Destroyed(12f, "1:1", "Troll*1", false, Here, 0f, 1200f, L(P("Ragnar", At(3), dead: true)), L(P("Ragnar", At(3))));
+            check(s.Out.Keys.All(k => k.Item1 != "kill"), "kill: not at the deletion itself — the game's kill note can still be on its way");
+            s.Core.Tick(15f, L(P("Ragnar", At(3))));
             check(s.Get("kill", "Ragnar", "Troll*1") == 1 && s.Get("kill", "Astrid", "Troll*1") == 1,
-                "kill: at the deletion with health ≤ 0, for whoever was in the fight at health 0 (even if dead since)");
+                "kill: 3 s after a deletion with health ≤ 0, for whoever was in the fight at health 0 (even if dead since)");
             check(s.Get("kw", "Ragnar", "SwordIron>Troll*1") == 1, "kill: with the weapon of their last attack");
             s.Core.Ragdoll(12.2f, "9:9", "Troll", 2, Here);
             s.Core.Tick(16f, L(P("Ragnar", At(1))));

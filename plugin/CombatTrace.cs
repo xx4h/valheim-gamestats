@@ -12,12 +12,13 @@
 // and the facts CombatCore doesn't use (yet), which replay skips (CombatFacts.cs says what each is):
 //   {"k":"meta","v":2,"noragdoll":["Seeker",…],"ragdolls":{"Goblin_ragdoll":["Goblin","GoblinArcher"]},
 //    "cost":{"StaffSkeleton/staff_summon":{"f":0,"p":40}},"drops":{"Tick":{"GiantBloodSack":1}},
-//    "timed":["Charred_Twitcher_Summoned"],"reach":{"Skeleton_Friendly/attack_bow":30}}
+//    "timed":["Charred_Twitcher_Summoned"],"reach":{"Skeleton_Friendly/attack_bow":30},"names":{"Greyling":"$enemy_greyling"},
+//    "weapons":{"SwordIron":{"ranged":false,"reach":2.4,"harmful":true}}}
 //   {"k":"trig","t":…,"u":…,"m":"Skeleton_Friendly","tr":"attack","fol":"Ragnar","tamed":true,"own":…,"x":…,
 //    "rh":"<right-hand item>","lh":"<left-hand item>"}
 //   {"k":"hit","t":…,"u":…,"m":"Troll*1","tamed":false,"own":…,"from":"Ragnar","att":"…","am":"player:Ragnar",
 //    "d":{"slash":45,"fire":10},"ht":"PlayerHit","se":"Burning","sk":"Swords","sl":35,"il":3,"bs":3,"x":…}
-//   {"k":"killnote","t":…,"from":"Ragnar","to":"Astrid","kind":"$enemy_troll","boss":0,"n":2}
+//   {"k":"killnote","t":…,"from":"Ragnar","to":"Astrid","kind":"$enemy_troll","boss":0,"n":2,"fromid":…}
 //   {"k":"rise","t":…,"u":…,"m":…,"tamed":false,"b":300,"a":340}
 //   {"k":"pethp","t":…,"u":…,"m":…,"fol":"Ragnar","b":400,"a":320}
 //   {"k":"owner","t":…,"u":…,"m":…,"was":123,"now":456}
@@ -108,6 +109,15 @@ namespace ValheimGamestats
             n = 0;
             foreach (var kv in meta.Reach)
                 sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(':').Append(F(kv.Value));
+            sb.Append('}').Key("names").Append('{');
+            n = 0;
+            foreach (var kv in meta.Names)
+                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(':').Append(Quote(kv.Value));
+            sb.Append('}').Key("weapons").Append('{');
+            n = 0;
+            foreach (var kv in meta.Weapons)
+                sb.Append(n++ > 0 ? "," : "").Append(Quote(kv.Key)).Append(":{\"ranged\":").Append(kv.Value.Ranged ? "true" : "false")
+                    .Append(",\"reach\":").Append(F(kv.Value.Reach)).Append(",\"harmful\":").Append(kv.Value.Harmful ? "true" : "false").Append('}');
             Write(sb.Append('}'));
         }
 
@@ -131,9 +141,9 @@ namespace ValheimGamestats
                 .Num("bs", backstab).Pos(point));
         }
 
-        internal static void KillNote(float t, string from, string to, string kind, int boss, int attackers) =>
+        internal static void KillNote(float t, string from, string to, string kind, int boss, int attackers, long fromId = 0) =>
             Write(new StringBuilder("{\"k\":\"killnote\"").Num("t", t).Str("from", from).Str("to", to).Str("kind", kind).Num("boss", boss)
-                .Num("n", attackers));
+                .Num("n", attackers).Num("fromid", fromId));
 
         internal static void Rise(float t, string uid, string who, bool tamed, float before, float after) =>
             Write(new StringBuilder("{\"k\":\"rise\"").Num("t", t).Str("u", uid).Str("m", who).Bool("tamed", tamed).Num("b", before)

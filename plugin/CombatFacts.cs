@@ -42,6 +42,7 @@ namespace ValheimGamestats
                 var character = go.GetComponent<Character>();
                 if (character != null && go.GetComponent<Player>() == null)
                 {
+                    meta.Names[go.name] = character.m_name; // what the game's kill notes name it by
                     var any = false;
                     foreach (var effect in character.m_deathEffects.m_effectPrefabs)
                     {
@@ -79,6 +80,20 @@ namespace ValheimGamestats
                 if (shared == null)
                     continue;
                 _items.Add(go.name.GetStableHashCode());
+                if (shared.m_attack != null && !string.IsNullOrEmpty(shared.m_attack.m_attackAnimation))
+                {
+                    // a player weapon: projectile or melee (and how far it reaches), and whether it does damage at all —
+                    // a shield or summoning cast is no evidence for a kill
+                    var ranged = false;
+                    var reach = 0f;
+                    foreach (var attack in new[] { shared.m_attack, shared.m_secondaryAttack })
+                        if (attack != null)
+                        {
+                            ranged |= attack.m_attackType == Attack.AttackType.Projectile;
+                            reach = Mathf.Max(reach, attack.m_attackRange);
+                        }
+                    meta.Weapons[go.name] = (ranged, reach, shared.m_damages.GetTotalDamage() > 0f);
+                }
                 foreach (var attack in new[] { shared.m_attack, shared.m_secondaryAttack })
                     if (attack != null && (attack.m_attackHealth > 0f || attack.m_attackHealthPercentage > 0f))
                         meta.Costs[go.name + "/" + attack.m_attackAnimation] = (attack.m_attackHealth, attack.m_attackHealthPercentage);
@@ -111,7 +126,7 @@ namespace ValheimGamestats
 
         internal static void OnRpc(ZRoutedRpc.RoutedRPCData data)
         {
-            if (!CombatTrace.Enabled || data.m_targetPeerID == 0L)
+            if (data.m_targetPeerID == 0L)
                 return; // neither is ever sent to everybody; those pass both hooks
             if (data.m_methodHash == DamageHash)
                 OnHit(data);
@@ -135,9 +150,14 @@ namespace ValheimGamestats
             {
                 pkg.SetPos(start);
             }
+            var who = Who(hit.m_attacker);
+            if (who != null && who.StartsWith("player:"))
+                Combat.Core.Hit(Time.time, Uid(target), who.Substring(7), hit.m_damage.GetTotalDamage());
+            if (!CombatTrace.Enabled)
+                return;
             var se = hit.m_statusEffectHash == 0 ? null : ObjectDB.instance?.GetStatusEffect(hit.m_statusEffectHash)?.name ?? hit.m_statusEffectHash.ToString();
             CombatTrace.Hit(Time.time, Uid(target), Who(target), target.GetBool(ZDOVars.s_tamed), target.GetOwner(),
-                PeerName(data.m_senderPeerID), hit.m_attacker.IsNone() ? null : hit.m_attacker.ToString(), Who(hit.m_attacker),
+                PeerName(data.m_senderPeerID), hit.m_attacker.IsNone() ? null : hit.m_attacker.ToString(), who,
                 Damages(hit.m_damage), hit.m_hitType.ToString(), se, hit.m_skill.ToString(), hit.m_skillLevel, hit.m_itemLevel,
                 hit.m_backstabBonus, Vec(hit.m_point));
         }
@@ -152,7 +172,11 @@ namespace ValheimGamestats
                 var boss = pkg.ReadInt();
                 pkg.ReadInt(); // modifiers
                 var attackers = pkg.ReadInt();
-                CombatTrace.KillNote(Time.time, PeerName(data.m_senderPeerID), PeerName(data.m_targetPeerID), kind, boss, attackers);
+                var to = ZNet.instance.GetPeer(data.m_targetPeerID)?.m_playerName;
+                Combat.Core.KillNote(Time.time, data.m_senderPeerID, to, kind);
+                if (CombatTrace.Enabled)
+                    CombatTrace.KillNote(Time.time, PeerName(data.m_senderPeerID), PeerName(data.m_targetPeerID), kind, boss, attackers,
+                        data.m_senderPeerID);
             }
             finally
             {
