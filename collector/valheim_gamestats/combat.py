@@ -14,7 +14,7 @@ import json
 import math
 import os
 
-RULES = 1  # bump with any rule change: cached results of finished runs are recomputed
+RULES = 2  # bump with any rule change: cached results of finished runs are recomputed
 
 MATCH_RANGE = 4.0
 ATTACKER_RANGE = 60.0
@@ -38,9 +38,22 @@ FACTOR_DEFAULT = 0.7
 COST_SECONDS = 2.0
 COST_SKILL_MIN = 0.67
 COST_FACTOR_DEFAULT = (1.0 + COST_SKILL_MIN) / 2.0
+# Character.ApplyDamage: a creature takes 1/(1+0.3(n-1)) of a hit, n the players within 100 m (Game.GetPlayerDifficulty,
+# at most 5; the plugin records it on each health fact since 1.22.0) — effective damage is what the hits would have done
+SCALE_PER_PLAYER = 0.3
+SCALE_PLAYERS_MAX = 5
 
 # the events these rules produce — in a run with facts they replace what the plugin sent (collector.py)
-RESULTS = {"dmg", "wdmg", "dw", "kill", "wkill", "kw", "taken", "hit", "cost", "ukill", "udmg", "sdw", "skw"}
+RESULTS = {"dmg", "wdmg", "dw", "kill", "wkill", "kw", "taken", "hit", "cost", "ukill", "udmg", "sdw", "skw", "edmg"}
+# ... of which only the collector's rules make these (the plugin's CombatCore.cs never did: no parity to check)
+COLLECTOR_ONLY = {"edmg"}
+
+
+def scale(near):
+    """How much more a hit does than a creature lost, with near players around it (None: not recorded)."""
+    if not near:
+        return None
+    return 1.0 + SCALE_PER_PLAYER * (min(int(near), SCALE_PLAYERS_MAX) - 1)
 
 
 def dist(a, b):
@@ -76,11 +89,11 @@ class Meta:
 
 class _Death:
     __slots__ = ("pos", "time", "name", "health", "attackers", "counted", "kind", "by", "hurt", "decided", "uid", "signal",
-                 "credited", "players", "listed", "via")
+                 "credited", "players", "listed", "via", "scale")
 
     def __init__(self, **kw):
         self.counted = self.decided = self.credited = False
-        self.signal = None
+        self.signal = self.scale = None
         self.attackers = []
         for k, v in kw.items():
             setattr(self, k, v)
@@ -143,6 +156,7 @@ class Core:
         self._with_ragdoll = set()
         self._summons, self._via = [], {}
         self._costs, self._cost_factor = {}, {}
+        self._scale, self._scales = None, {}  # the health drop being credited: its scale; per creature: its last
         self._meta = Meta()
 
     def _add(self, e, p, i, n):
@@ -258,7 +272,7 @@ class Core:
         self._add("hit", player, "", 1)
         return lost
 
-    def creature_health(self, t, uid, mob, pos, before, after, on_list, owner=0):
+    def creature_health(self, t, uid, mob, pos, before, after, on_list, owner=0, near=None):
         self.now = t
         self._remember(on_list, all_=False)
         after_clamped = max(0.0, after)
@@ -269,7 +283,13 @@ class Core:
             self._hurt.clear()
         self._hurt[uid] = t
         attackers = self._fighting(on_list, pos)
-        self._attribute(uid, mob, pos, lost, t, on_list, owner)
+        if len(self._scales) > 5000:
+            self._scales.clear()
+        self._scale = self._scales[uid] = scale(near)
+        try:
+            self._attribute(uid, mob, pos, lost, t, on_list, owner)
+        finally:
+            self._scale = None
         if after_clamped <= 0:
             if len(self._killers) > 1000:
                 self._killers.clear()
@@ -286,7 +306,7 @@ class Core:
                        via=(self._kill_via[uid] if uid in self._kill_via
                             else self._via_of(uid, pos, t, self._fighting(on_list, pos))),
                        kind=prefab(mob), by=by, listed=self._names(on_list), uid=uid, players=players or [],
-                       hurt=uid in self._hurt and t - self._hurt[uid] <= HURT_SECONDS)
+                       hurt=uid in self._hurt and t - self._hurt[uid] <= HURT_SECONDS, scale=self._scales.pop(uid, None))
         death.attackers = self._killers[uid] if uid in self._killers else self._with(self._fighting(on_list, pos), death.via)
         for d in (self._killers, self._kill_via, self._via, self._hurt):
             d.pop(uid, None)
@@ -393,7 +413,11 @@ class Core:
         for p in killers:
             self._last_on.pop((d.uid or "", p), None)
         if killers and d.health > 0:
-            self._damage(killers, d.name, d.health, d.time, via=via)
+            self._scale = d.scale  # what was left of it: as the creature's last drop was scaled
+            try:
+                self._damage(killers, d.name, d.health, d.time, via=via)
+            finally:
+                self._scale = None
 
     def _noted(self, d, consume=True):
         names = []
@@ -593,6 +617,8 @@ class Core:
         self._add("dw", player, f"{p}>{mob}", amount)
         if weapon != p:
             self._add("sdw", player, f"{weapon}>{mob}", amount)
+        if self._scale is not None:
+            self._add("edmg", player, mob, amount * self._scale)
 
     def _summons_at(self, uid, pos, at):
         return [a for a in self._summons if at - HIT_WINDOW <= a.time <= at and (a.target is None or a.target == uid)
@@ -675,7 +701,7 @@ class Feeder:
             self.core.player_health(f.get("p"), float(f["b"]), float(f["a"]), float(f["mb"]), float(f["ma"]), t)
         elif k == "health":
             self.core.creature_health(t, f.get("u"), f.get("m"), _pos(f), float(f["b"]), float(f["a"]), _players(f.get("l")),
-                                      int(f.get("own") or 0))
+                                      int(f.get("own") or 0), f.get("n"))
         elif k == "trig":
             if f.get("tamed") and f.get("fol"):
                 v = _variant(f)

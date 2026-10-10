@@ -30,6 +30,16 @@ class Fights(unittest.TestCase):
         self.assertEqual({p: (v["d"], v["k"]) for p, v in f["players"].items()}, {"Ragnar": (400, 1), "Astrid": (200, 0)})
         self.assertEqual(f["players"]["Astrid"]["w"], {"Bow": 200})
 
+    def test_fight_effective_damage(self):
+        f, = build(self.fight(), 600)
+        self.assertNotIn("edmg", f)  # no effective damage recorded: none, not 0
+        self.assertNotIn("ed", f["players"]["Ragnar"])
+        log = self.fight().g(60, e="edmg", p="Ragnar", i="Eikthyr", n=390).g(120, e="edmg", p="Ragnar", i="Eikthyr", n=130)
+        log.g(60, e="edmg", p="Astrid", i="Eikthyr", n=260)
+        f, = build(log, 600)
+        self.assertEqual((f["dmg"], f["edmg"]), (600, 780))
+        self.assertEqual({p: v["ed"] for p, v in f["players"].items()}, {"Ragnar": 520, "Astrid": 260})
+
     def test_fight_deaths_of_participants(self):
         log = self.fight().death(100, "Bjorn")  # died elsewhere at the same time: not part of this fight
         f, = build(log, 600)

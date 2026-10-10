@@ -23,6 +23,8 @@ def run(path):
     sums = {}
 
     def out(t, e, p, i, n):
+        if e in combat.COLLECTOR_ONLY:
+            return  # the plugin's rules never made these: nothing to compare
         key = f"{e}|{p}|{i}"
         sums[key] = sums.get(key, 0) + n
     feeder = combat.Feeder(out)
@@ -68,6 +70,62 @@ def run_events(path, start, version="1.22.0"):
         else:
             evs.append(dict(f, t=start + 0.5))
     return evs
+
+
+class Effective(unittest.TestCase):
+    """Effective damage (edmg): what the hits would have done without the game scaling a creature's damage taken down
+    by the players near it (1/(1+0.3(n-1)), n at most 5) — from the health facts' n, only where it was recorded."""
+
+    def run_facts(self, facts):
+        sums = {}
+
+        def out(t, e, p, i, n):
+            sums[(e, p, i)] = sums.get((e, p, i), 0) + n
+        feeder = combat.Feeder(out)
+        for t, f in facts:
+            feeder.feed(t, f)
+        feeder.end(facts[-1][0])
+        return sums
+
+    def fight(self, near):
+        here = [{"n": "Ragnar", "b": True, "d": False, "x": 0, "y": 0, "z": 0, "h": "SwordIron", "c": 1001},
+                {"n": "Astrid", "b": True, "d": False, "x": 2, "y": 0, "z": 0, "h": "SwordIron", "c": 1002}]
+        health = {"k": "health", "u": "1:5", "m": "Troll", "x": 1, "y": 0, "z": 0, "l": here, "own": 1001}
+        if near is not None:
+            health["n"] = near
+        return [(10.0, {"k": "meta0"}),
+                (10.1, {"k": "attack", "p": "Ragnar", "w": "SwordIron", "an": "swing"}),
+                (10.2, {"k": "attack", "p": "Astrid", "w": "SwordIron", "an": "swing"}),
+                (10.5, dict(health, b=600, a=500)),
+                (11.5, dict(health, b=500, a=0)),
+                (11.6, {"k": "destroy", "u": "1:5", "m": "Troll", "x": 1, "y": 0, "z": 0, "h": 0, "mh": 600, "l": here,
+                        "ps": here, "own": 1001})]
+
+    @staticmethod
+    def total(got, e):
+        return sum(v for k, v in got.items() if k[0] == e)
+
+    def test_scaled_by_the_players_near(self):
+        self.assertEqual([combat.scale(n) for n in (None, 0, 1, 2, 3, 5, 8)], [None, None, 1.0, 1.3, 1.6, 2.2, 2.2])
+        got = self.run_facts(self.fight(2))
+        self.assertAlmostEqual(self.total(got, "dmg"), 600)
+        self.assertAlmostEqual(self.total(got, "edmg"), 600 * 1.3)
+        for (e, p, i), n in got.items():  # every player's share, scaled alike
+            if e == "dmg":
+                self.assertAlmostEqual(got[("edmg", p, i)], n * 1.3)
+
+    def test_none_without_the_count(self):
+        got = self.run_facts(self.fight(None))
+        self.assertAlmostEqual(self.total(got, "dmg"), 600)
+        self.assertEqual(self.total(got, "edmg"), 0)
+
+    def test_what_was_left_at_death_as_the_last_drop(self):
+        fight = self.fight(3)
+        facts = fight[:-2] + [(11.6, {"k": "killnote", "from": "Ragnar", "fromid": 1001, "to": "Ragnar", "kind": "$enemy_troll"}),
+                              (11.6, dict(fight[-1][1], h=200))]  # deleted with 200 left (its owner saw it die)
+        got = self.run_facts(facts)
+        self.assertAlmostEqual(self.total(got, "dmg"), 300)
+        self.assertAlmostEqual(self.total(got, "edmg"), 300 * 1.6)
 
 
 class Recompute(unittest.TestCase):

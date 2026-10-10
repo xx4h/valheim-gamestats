@@ -6,8 +6,9 @@ those lines on one boss: it ends when the boss dies (every part of it, see
 GROUPS / FINAL) or after GAP without damage — then the players gave up, and
 the boss heals back to full within the hour (BaseAI regenerates every monster
 by its max health per hour). Per fight: when, how long, outcome, damage per
-player and weapon, kills, and the deaths and damage taken of the players in it
-(those are all sources, not only the boss).
+player and weapon (and effective damage, "ed"/"edmg", since plugin 1.22.0),
+kills, and the deaths and damage taken of the players in it (those are all
+sources, not only the boss).
 
 Before plugin 1.5.0 a health drop was split evenly over everyone who had ever
 hit the boss; from 1.5.0 by who attacked. The plugin logs its version on start
@@ -43,7 +44,7 @@ def build(evs, deaths, creatures, now):
         if e == "taken":
             taken.append((t, p, n))
             continue
-        if e not in ("dmg", "dw", "kill"):
+        if e not in ("dmg", "dw", "kill", "edmg"):
             continue
         weapon, _, mob = i.rpartition(">")
         part = mob.split("*")[0]
@@ -61,8 +62,10 @@ def build(evs, deaths, creatures, now):
             f = open_[key] = {"boss": key, "s": t - 60, "e": t, "parts": set(), "dead": set(), "done": None,
                               "players": {}}
         f["e"] = max(f["e"], t)
-        pl = f["players"].setdefault(p, {"d": 0, "w": {}, "k": 0})
-        if e == "dmg":
+        pl = f["players"].setdefault(p, {"d": 0, "w": {}, "k": 0, "ed": None})
+        if e == "edmg":
+            pl["ed"] = (pl["ed"] or 0) + n
+        elif e == "dmg":
             pl["d"] += n
             f["parts"].add(part)
         elif e == "dw":
@@ -87,6 +90,8 @@ def build(evs, deaths, creatures, now):
             players[p] = {"d": v["d"], "w": v["w"], "k": v["k"],
                           "x": sum(1 for _, q in died if q == p),
                           "tk": sum(n for t, q, n in taken if q == p and s < t <= e)}
+            if v["ed"] is not None:
+                players[p]["ed"] = v["ed"]
         out.append({
             "id": f"{f['boss']}-{s}",
             "boss": f["boss"],
@@ -99,4 +104,6 @@ def build(evs, deaths, creatures, now):
             "deaths": died,
             "exact": exact_since is not None and f["s"] >= exact_since,
         })
+        if any("ed" in v for v in players.values()):  # effective damage, where the plugin recorded the players near
+            out[-1]["edmg"] = sum(v.get("ed", 0) for v in players.values())  # the boss (1.22.0): see combat.scale
     return out
