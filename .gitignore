@@ -1,5 +1,5 @@
 __pycache__/
-plugin/lib/
+plugin/lib
 plugin/bin/
 plugin/obj/
 tests/plugin/bin/
