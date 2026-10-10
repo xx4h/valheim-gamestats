@@ -68,7 +68,13 @@ namespace ValheimGamestats
                 {
                     // a reply never holds it (After stops before it), so the collector would ask for it forever: refused,
                     // its number stays free — the stream goes on
-                    Warn("too big", $"{body.Substring(0, Math.Min(40, body.Length))}… ({line.Length} bytes) not stored");
+                    var what = $"{body.Substring(0, Math.Min(40, body.Length))}… ({line.Length} bytes) not stored";
+                    Warn("too big", what);
+                    // and for the collector (the store works, only this event can't go): its alert error:events
+                    var sb = new StringBuilder("{\"e\":\"warn\",\"p\":\"\",\"i\":\"events\",\"n\":1,\"msg\":\"too big: ");
+                    foreach (var c in what)
+                        sb.Append(c == '"' || c == '\\' ? "\\" + c : c < ' ' ? " " : c.ToString());
+                    Append(sb.Append("\"}").ToString());
                     return 0;
                 }
                 try

@@ -133,7 +133,9 @@ static class Program
                 "too big for a reply: not stored, one warning naming it");
             s.Append(Ev(2));
             var (_, lines) = ReadAll(s, 0);
-            Check(lines.Count == 2 && Consecutive(lines, 1), "too big for a reply: the stream goes on, no gap, no stop");
+            Check(lines.Count == 3 && Consecutive(lines, 1) && lines.All(Json), "too big for a reply: the stream goes on, no gap, no stop");
+            Check(lines[1].Contains("\"e\":\"warn\"") && lines[1].Contains("\"i\":\"events\"") && lines[1].Contains("too big: {\\\"e\\\":\\\"meta\\\""),
+                "too big for a reply: a warn event for the collector (alert error:events), naming it");
             s.Close();
         }
         {
