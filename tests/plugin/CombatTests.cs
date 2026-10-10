@@ -7,7 +7,7 @@ using System.IO;
 using System.Linq;
 using ValheimGamestats;
 
-static class CombatTests
+static partial class CombatTests
 {
     // a core and what it wrote: (event, player, object) → sum
     class Sim
@@ -40,6 +40,7 @@ static class CombatTests
 
     internal static void Run(Action<bool, string> check)
     {
+        RunAttribution(check);
         // ---- damage dealt
         {
             var s = new Sim();
@@ -140,10 +141,10 @@ static class CombatTests
         // ---- damage taken
         {
             var s = new Sim();
-            check(s.Core.PlayerHealth("Ragnar", 100f, 70f, 120f, 120f) && Near(s.Get("taken", "Ragnar", ""), 30) && s.Get("hit", "Ragnar", "") == 1,
+            check(Near(s.Core.PlayerHealth("Ragnar", 100f, 70f, 120f, 120f), 30) && Near(s.Get("taken", "Ragnar", ""), 30) && s.Get("hit", "Ragnar", "") == 1,
                 "taken: a player's health drop, and one hit");
-            check(!s.Core.PlayerHealth("Ragnar", 150f, 120f, 150f, 120f), "taken: food wearing off (health clamped to the new max) is not damage");
-            check(!s.Core.PlayerHealth("Ragnar", 100f, 99.995f, 120f, 120f), "taken: no drop, no hit");
+            check(s.Core.PlayerHealth("Ragnar", 150f, 120f, 150f, 120f) == 0, "taken: food wearing off (health clamped to the new max) is not damage");
+            check(s.Core.PlayerHealth("Ragnar", 100f, 99.995f, 120f, 120f) == 0, "taken: no drop, no hit");
         }
 
         // ---- weapons of players who left

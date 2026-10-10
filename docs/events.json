@@ -116,6 +116,14 @@
     "test_golden.Golden.test_golden"
    ]
   },
+  "cost": {
+   "from": "CombatCore.cs",
+   "becomes": "gather",
+   "page": "Health paid (player page)",
+   "tests": [
+    "test_rebuild.EveryKind.test_every_summed_event"
+   ]
+  },
   "dist": {
    "from": "Vitals.cs",
    "becomes": "gather",

@@ -45,7 +45,7 @@ namespace ValheimGamestats
     }
 
     // What the game's prefabs say, once (the adapter fills it; a trace carries it as "meta"): what the attribution rules
-    // need to know about creatures and items (docs/ATTRIBUTION.md). Not used by CombatCore yet.
+    // need to know about creatures and items (docs/ATTRIBUTION.md). CombatCore uses the health costs so far.
     internal class CombatMeta
     {
         public readonly Dictionary<string, List<string>> Ragdolls = new Dictionary<string, List<string>>(); // ragdoll → creature kinds
@@ -64,6 +64,9 @@ namespace ValheimGamestats
         internal const float SettleSeconds = 3f;  // let the deletion of a ragdoll's mob arrive first
         internal const float CreditRange = 15f;   // a one-hit kill without known attackers: the nearest player
         internal const float Keep = 30f;          // seconds of attack history per player
+        internal const float CostSeconds = 2f;    // a health-cost attack's cost arrives in the next sync, well within this
+        internal const float CostSkillMin = 0.67f; // cost × (1 − 0.33 × skill factor): at skill 100 a third less
+        internal const float CostFactorDefault = (1f + CostSkillMin) / 2f; // until a clean cost showed the player's own
 
         private readonly Action<string, string, string, double> _add;              // Gather.Add
         private readonly Action<string, string, List<string>, string, Vec?> _diag; // what, creature, attackers, detail, where
@@ -99,12 +102,15 @@ namespace ValheimGamestats
         private readonly Dictionary<string, List<(float Time, string Weapon)>> _attacks =
             new Dictionary<string, List<(float, string)>>();
         private readonly Dictionary<string, string> _held = new Dictionary<string, string>();
+        private readonly Dictionary<string, List<(float Time, string Weapon, float Flat, float Percent)>> _costs =
+            new Dictionary<string, List<(float, string, float, float)>>(); // health-cost attacks whose cost hasn't shown yet
+        private readonly Dictionary<string, float> _costFactor = new Dictionary<string, float>(); // per player: 1 − 0.33 × skill factor
 
         private CombatMeta _meta = new CombatMeta();
 
         // ---- inputs ----------------------------------------------------------------------------------------------
 
-        // The prefabs' facts, once (not used yet).
+        // The prefabs' facts, once.
         internal void Meta(CombatMeta meta) => _meta = meta ?? new CombatMeta();
 
         // A summon or commanded tame (`follow`: its player) started an attack (not used yet).
@@ -117,9 +123,17 @@ namespace ValheimGamestats
         {
         }
 
-        // A player started an attack with this weapon (Attacks.cs: the animation trigger). animation: not used yet.
+        // A player started an attack with this weapon (Attacks.cs: the animation trigger). An attack that costs health
+        // (blood magic: Meta.Costs by weapon and animation) takes it in its first frame: the player's next health drop.
         internal void Attack(float t, string player, string weapon, string animation = null)
         {
+            if (animation != null && _meta.Costs.TryGetValue(weapon + "/" + animation, out var cost))
+            {
+                if (!_costs.TryGetValue(player, out var pending))
+                    _costs[player] = pending = new List<(float, string, float, float)>();
+                pending.RemoveAll(c => t - c.Time > CostSeconds);
+                pending.Add((t, weapon, cost.Flat, cost.Percent));
+            }
             if (!_attacks.TryGetValue(player, out var list))
                 _attacks[player] = list = new List<(float, string)>();
             list.RemoveAll(a => t - a.Time > Keep);
@@ -127,18 +141,48 @@ namespace ValheimGamestats
         }
 
         // A player's health changed: damage taken and one hit per drop; a drop to exactly the new, lower max health is
-        // food wearing off. True when it counted (the adapter then tells Vitals).
-        internal bool PlayerHealth(string player, float before, float after, float maxBefore, float maxAfter, float t = 0f)
+        // food wearing off. A drop that is the cost of their own health-cost attack (blood magic) is `cost`, not damage:
+        // the game takes (flat + health × percent / 100) × (1 − 0.33 × skill factor), at most health − 1; the skill
+        // isn't on the server, so anything from a third less up to the full cost is it. More than that is a hit merged
+        // into the same sync: the cost at the player's own factor (learned from clean costs), the rest damage. Less is
+        // something else (a poison tick); the cost is still to come. Returns the damage taken (0: not damage).
+        internal float PlayerHealth(string player, float before, float after, float maxBefore, float maxAfter, float t = 0f)
         {
             after = Math.Max(0f, after);
             var lost = before - after;
             if (lost <= 0.01f)
-                return false;
+                return 0f;
             if (maxAfter < maxBefore - 0.01f && Math.Abs(after - maxAfter) < 0.01f)
-                return false;
+                return 0f;
+            if (_costs.TryGetValue(player, out var pending))
+            {
+                pending.RemoveAll(c => t - c.Time > CostSeconds);
+                if (pending.Count > 0)
+                {
+                    var c = pending[0];
+                    var full = c.Flat + before * c.Percent / 100f;
+                    var margin = Math.Max(0.5f, 0.02f * full);
+                    var capped = after <= 1f + margin && full * CostSkillMin >= before - 1f - margin; // at most health − 1
+                    if (capped || (lost >= full * CostSkillMin - margin && lost <= full + margin))
+                    {
+                        pending.RemoveAt(0);
+                        if (!capped && full > 0f)
+                            _costFactor[player] = Math.Min(1f, lost / full);
+                        _add("cost", player, c.Weapon, lost);
+                        return 0f;
+                    }
+                    if (lost > full + margin)
+                    {
+                        pending.RemoveAt(0);
+                        var cost = Math.Min(before - 1f, full * (_costFactor.TryGetValue(player, out var f) ? f : CostFactorDefault));
+                        _add("cost", player, c.Weapon, cost);
+                        lost -= cost;
+                    }
+                }
+            }
             _add("taken", player, "", lost);
             _add("hit", player, "", 1);
-            return true;
+            return lost;
         }
 
         // An untamed creature's health changed. onList: the online players on its attacker list, as they are now.

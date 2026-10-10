@@ -164,7 +164,10 @@ of what the player holds. A health drop is split per attack in the 3 s before
 it, with that attack's weapon; with no attack in that window (damage over time),
 evenly, with each player's last attack weapon. A player's loss is damage
 and one hit taken (a clamp to a lower max health when food wears off is
-skipped). A mob deleted with health ≤ 0 is a kill for every attacker (taken
+skipped), except the cost of their own blood magic: a health-cost attack takes
+(flat + health × percent) × (1 − 0.33 × skill factor) in its first frame, so a
+drop in that range right after its trigger is `cost` (health paid), and a
+bigger one is the cost plus a hit merged into the same sync. A mob deleted with health ≤ 0 is a kill for every attacker (taken
 when its health hit 0, so someone who dies right after still counts); its
 name carries the stars (`Troll*1`). One-hit kills are deleted before their
 last state syncs, so the ragdoll every death spawns (a networked object) is

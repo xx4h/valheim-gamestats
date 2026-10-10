@@ -16,6 +16,7 @@
 // - taken / hit: a player's health drops — the amount, and one hit per drop
 //   (hits inside one sync interval merge; damage-over-time ticks count each).
 //   A drop to exactly the new, lower max health is food wearing off: skipped.
+//   A drop that is the cost of the player's own blood magic is `cost`, not damage.
 // - kill / wkill: a mob dies. Two signals, matched by place and time:
 //   a mob deleted with health ≤ 0 (its attackers get the kill), and the
 //   ragdoll every death spawns (a networked object, so it reaches the server
@@ -99,8 +100,9 @@ namespace ValheimGamestats
                 var maxAfter = zdo.GetFloat(ZDOVars.s_maxHealth, maxBefore);
                 if (CombatTrace.Enabled)
                     CombatTrace.Player(Time.time, victim.m_playerName, before, after, maxBefore, maxAfter);
-                if (Core.PlayerHealth(victim.m_playerName, before, after, maxBefore, maxAfter, Time.time))
-                    Vitals.OnPlayerHit(victim.m_playerName, before - Mathf.Max(0f, after), Mathf.Max(0f, after));
+                var taken = Core.PlayerHealth(victim.m_playerName, before, after, maxBefore, maxAfter, Time.time);
+                if (taken > 0f)
+                    Vitals.OnPlayerHit(victim.m_playerName, taken, Mathf.Max(0f, after));
                 return;
             }
             var t = Time.time;

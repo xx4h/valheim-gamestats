@@ -137,6 +137,7 @@ static class Program
         if (args.Length == 2 && args[0] == "replay")
         {
             // dotnet run -- replay <trace.jsonl>: a real session through today's CombatCore, against what the plugin made of it
+            // then — the differences are what the rules changed since that build (the exact round trip is a test above)
             var (now, then) = Replay.Run(args[1]);
             foreach (var key in now.Keys.Union(then.Keys).OrderBy(k => k))
             {
@@ -145,7 +146,8 @@ static class Program
                 if (Math.Abs(a - b) >= 1e-3)
                     Console.WriteLine($"  {key.Item1} {key.Item2} {key.Item3}: then {b:0.##}, now {a:0.##}");
             }
-            Check(Replay.Same(now, then), $"replay {Path.GetFileName(args[1])}: {then.Count} sums as recorded");
+            Console.WriteLine(Replay.Same(now, then) ? $"      replay {Path.GetFileName(args[1])}: {then.Count} sums as recorded"
+                : $"      replay {Path.GetFileName(args[1])}: differs from what was recorded (above: then → now)");
             var (violations, coverage) = Replay.Invariants(File.ReadLines(args[1]), now);
             foreach (var v in violations)
                 Console.WriteLine("  " + v);

@@ -42,7 +42,8 @@ the collector credits exactly whom the plugin's line names, no one more, and
 |---|---|---|
 | Damage dealt | players in the mob's attacker list who attacked within 3 s before the health drop, alive and within 60 m; one share per attack, else split evenly | plugin |
 | Kill | every attacker of a mob that died with health ≤ 0 (alive, within 60 m); a one-hit kill seen only as a ragdoll: its known attackers, else the nearest player within 15 m | plugin |
-| Damage / hits taken | the player whose health dropped (not a drop to a new, lower max health: food wearing off) | plugin |
+| Damage / hits taken | the player whose health dropped (not a drop to a new, lower max health: food wearing off; not the cost of their own blood magic) | plugin |
+| Health paid | the player whose own health-cost attack (Dead Raiser, Staff of Protection, Trollstav …) took it: the drop right after its trigger, from a third less (blood magic skill) up to the full cost; a hit in the same sync is the rest, as damage taken | plugin |
 | Pet killed | never a kill or damage dealt; recorded as the pet's death | plugin ≥ 1.8.0 |
 
 ### Checks
