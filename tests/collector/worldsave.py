@@ -1,4 +1,4 @@
-"""Writes a Valheim world save (version 41, chunked) the way collector/valheim_world.py reads it — the
+"""Writes a Valheim world save (version 42, chunked) the way collector/valheim_world.py reads it — the
 inverse of its parse_* functions, so it doubles as a description of the format.
 
     w = World().keys(["defeated_eikthyr"]).location("Eikthyrnir", 300, -200)
@@ -52,7 +52,7 @@ def item(prefab, stack=1, quality=1, crafter="", cid=0, custom=None):
     return {"prefab": prefab, "stack": stack, "quality": quality, "crafter": crafter, "cid": cid, "custom": custom or {}}
 
 
-def inventory(items, version=109):
+def inventory(items, version=110):
     """Inventory blob (Inventory.Save): version, u16 count, per item a flag byte saying which fields follow."""
     out = struct.pack("<iH", version, len(items))
     for it in items:
