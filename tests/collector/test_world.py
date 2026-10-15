@@ -46,6 +46,20 @@ class Format(unittest.TestCase):
                                              (vw.stable_hash("SwordIron"), 1, 3, 1002, "Astrid"),
                                              (vw.stable_hash("Coins"), 1, 1, 0, "")])
 
+    def test_inventory_versions_share_one_layout(self):
+        for v in vw.ITEM_VERSIONS:
+            self.assertEqual(vw.parse_items(inventory([("Wood", 20), ("Coins",)], version=v)),
+                             [(vw.stable_hash("Wood"), 20, 1, 0, ""), (vw.stable_hash("Coins"), 1, 1, 0, "")], v)
+
+    def test_save_mixing_world_versions(self):
+        """After a game update the db2 and the chunks written since are 42, chunks untouched since stay 41."""
+        w = World().piece("wood_wall", 10, 10, creator=1001).piece("wood_wall", -600, 1100, creator=1001)
+        files, names = w.files()
+        old = min(n for n in files if n.endswith(".chunk"))
+        files[old] = struct.pack("<h", 41) + files[old][2:]
+        s = vw.snapshot(files.__getitem__, files, w.save, names, dict(PLAYERS), {})
+        self.assertEqual(s["pieces"]["Ragnar"]["total"], 2)
+
     def test_chunk_map_names_the_chunk_files(self):
         w = World().piece("wood_wall", 10, 10).piece("wood_wall", -600, 1100)
         files, _ = w.files()
@@ -65,12 +79,14 @@ class Fails(unittest.TestCase):
     def test_wrong_world_version_raises(self):
         with self.assertRaisesRegex(ValueError, "db2: world version 40"):
             snap(World(version=40).piece("wood_wall"))
-        with self.assertRaisesRegex(ValueError, "chunk: world version 42"):
-            snap(World(chunk_version=42).piece("wood_wall"))
+        with self.assertRaisesRegex(ValueError, "db2: world version 43"):
+            snap(World(version=43).piece("wood_wall"))
+        with self.assertRaisesRegex(ValueError, "chunk: world version 43"):
+            snap(World(chunk_version=43).piece("wood_wall"))
 
     def test_unknown_inventory_version_raises(self):
-        with self.assertRaisesRegex(ValueError, "inventory version 110"):
-            vw.parse_items(inventory([("Wood", 1)], version=110))
+        with self.assertRaisesRegex(ValueError, "inventory version 111"):
+            vw.parse_items(inventory([("Wood", 1)], version=111))
 
     def test_unknown_shared_map_version_raises(self):
         with self.assertRaisesRegex(ValueError, "shared map version 4"):
