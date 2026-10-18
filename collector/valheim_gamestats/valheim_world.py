@@ -1,7 +1,7 @@
 """Valheim world-save reader for the gamestats collector.
 
-Reads the chunked world save (world version 41, "Deep North" save system)
-that a dedicated server keeps in worlds_local/<world>/:
+Reads the chunked world save (world versions 41 "Deep North" and 42
+"CheatCleanSlate") that a dedicated server keeps in worlds_local/<world>/:
 
   _main.<n>.ok       marker: save <n> is complete
   _main.<n>.db2      header + compressed zone data (global keys, locations)
@@ -27,9 +27,12 @@ import zlib
 from collections import Counter, defaultdict
 from datetime import datetime
 
-WORLD_VERSION = 41
+# The layout is the same in both: 42 only changed how the game flags cheated items. A save mixes them —
+# chunk files untouched since the game update keep the version they were written with.
+WORLD_VERSIONS = (41, 42)  # DeepNorth, CheatCleanSlate
+WORLD_VERSION = WORLD_VERSIONS[-1]  # what the game writes now
 SCHEMA = 12  # bump when snapshot() output changes; forces a re-read of the current save
-ITEM_VERSIONS = (107, 108, 109)  # AbandonedDN, Smaller, ChunksNCheats
+ITEM_VERSIONS = (107, 108, 109, 110)  # AbandonedDN, Smaller, ChunksNCheats, NewCheats
 
 # Landmarks shown on the map once their zone is generated: location prefab -> (kind, label)
 MAP_LOCATIONS = {
@@ -149,8 +152,8 @@ def _decompress(b):
 def parse_db2(b):
     r = Reader(b)
     ver = r.i32()
-    if ver != WORLD_VERSION:
-        raise ValueError(f"db2: world version {ver}, parser knows {WORLD_VERSION}")
+    if ver not in WORLD_VERSIONS:
+        raise ValueError(f"db2: world version {ver}, parser knows {WORLD_VERSIONS}")
     net_time = r.f64()
     z = Reader(_decompress(r.take(r.i32())))
     zones = z.i32()
@@ -212,8 +215,8 @@ def iter_zdos(b):
     """Yield (prefab_hash, data{key_hash: value}, (x, z)) for every ZDO in a chunk file."""
     r = Reader(b)
     ver = r.i16()
-    if ver != WORLD_VERSION:
-        raise ValueError(f"chunk: world version {ver}, parser knows {WORLD_VERSION}")
+    if ver not in WORLD_VERSIONS:
+        raise ValueError(f"chunk: world version {ver}, parser knows {WORLD_VERSIONS}")
     for _ in range(r.i32()):
         fl = r.u16()
         if fl & 0x2000:  # small position: two shorts, y = 0
